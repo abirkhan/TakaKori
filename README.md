@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TakaKori
 
-## Getting Started
+Personal income and expense tracker for Bangladesh, built to grow into a
+free platform for a wider audience.
 
-First, run the development server:
+Next.js 16 (App Router) · Supabase (Postgres + Auth + RLS) · Netlify · TypeScript
+
+## Status
+
+Phase 0 complete. See [`docs/roadmap.md`](docs/roadmap.md).
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env.local   # add your Supabase URL and publishable key
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Database setup (requires `npx supabase login` once):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npx supabase link --project-ref <your-ref>
+npx supabase db push
+npx supabase gen types types/database.ts
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+| Command | Purpose |
+|---|---|
+| `npm run dev` | development server |
+| `npm run build` | production build |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (`next lint` was removed in Next 16) |
+| `npm run test` | Vitest unit tests |
+| `npm run test:e2e` | Playwright E2E |
+| `npm run verify` | typecheck → lint → test → build |
 
-To learn more about Next.js, take a look at the following resources:
+## Documentation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Start with [`AGENTS.md`](AGENTS.md), then:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [`docs/architecture.md`](docs/architecture.md) — stack and structure
+- [`docs/database.md`](docs/database.md) — schema and tenancy
+- [`docs/security.md`](docs/security.md) — RLS and authorization
+- [`docs/decisions.md`](docs/decisions.md) — why each choice was made
+- [`docs/roadmap.md`](docs/roadmap.md) — phases
 
-## Deploy on Vercel
+Agent operating rules live in [`.opencode/skills/`](.opencode/skills/).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Conventions worth knowing before you write code
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Session refresh lives in `src/proxy.ts`. Next.js 16 renamed `middleware.ts`;
+  the old name is silently ignored.
+- Money crosses the API as a **string**. Use `src/lib/money.ts`; never do
+  arithmetic on a raw amount.
+- A `PATCH`/`DELETE` without an `.eq('id', id)` filter affects every row.
+- RLS is the security boundary. Application code is never trusted to filter.
+- Transfers are a transaction `type`, not a category, and are excluded from
+  income and expense totals.
+- All reporting ranges are computed in the user's timezone, never UTC.
