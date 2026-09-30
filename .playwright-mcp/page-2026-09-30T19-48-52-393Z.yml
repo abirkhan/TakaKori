@@ -1,0 +1,26 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - link [ref=f2e4] [cursor=pointer]:
+      - /url: /
+      - heading "TakaKori" [level=1] [ref=f2e5]
+      - paragraph [ref=f2e6]: Track where your money goes
+    - generic [ref=f2e7]:
+      - generic [ref=f2e8]:
+        - heading "Sign in" [level=2] [ref=f2e9]
+        - generic [ref=f2e10]:
+          - generic [ref=f2e11]: Email
+          - textbox "Email" [ref=f2e12]
+        - generic [ref=f2e13]:
+          - generic [ref=f2e14]: Password
+          - textbox "Password" [ref=f2e15]
+        - button "Sign in" [ref=f2e16]
+        - generic [ref=f2e17]:
+          - link "Create an account" [ref=f2e18] [cursor=pointer]:
+            - /url: /signup
+          - link "Forgot password?" [ref=f2e19] [cursor=pointer]:
+            - /url: /forgot-password
+      - generic [ref=f2e20]:
+        - generic [ref=f2e21]: or
+        - link "Continue with Google" [ref=f2e24] [cursor=pointer]:
+          - /url: /auth/login/google
+  - button "Open Next.js Dev Tools" [ref=f2e35] [cursor=pointer]

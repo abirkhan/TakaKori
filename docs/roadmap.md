@@ -23,33 +23,44 @@ Status: **Phase 0 complete**, Phase 1 next.
 Goal: one user can sign up, add a transaction, and see it on a dashboard.
 
 - [x] **Auth pages** — signup, login, logout, email confirmation, password reset
-- [x] **Transactions CRUD** — create, list, delete via Server Actions
-- [x] **Accounts CRUD** — create and list; schema already seeded at signup
-- [x] **Categories** — create and list; rename still to do
+- [x] **Google OAuth** — PKCE via route handlers; needs the provider enabled in
+      the dashboard plus the `{SITE_URL}/auth/callback/google` redirect URL
+- [x] **Transactions** — create, read, update, delete
+- [x] **Accounts and categories** — create and list
 - [x] **Dashboard** — total balance, month income/expense/savings, recent
-      transactions, account balances
-- [x] **Range-scoped totals** — `workspace_totals_for_range` RPC, since
-      `workspace_totals` is lifetime-only and cannot answer "this month"
-- [x] **RLS verified live** — two users, cross-tenant read/update/delete denied,
-      7 row-shape invariants rejected, reconciliation checked
-- [ ] **Edit transaction** — action exists; no UI yet
-- [ ] **Filters and search** — date range, type, category, account
-- [ ] **CSV export** — users must be able to get their data out
-- [ ] **Google OAuth** — biggest adoption win for a public audience
-- [ ] **Browser verification** — blocked on `.env.local`
+      transactions, per-account balances
+- [x] **Filters and pagination** — period, type, category, account; URL-driven
+- [x] **CSV export** — `/api/export/csv`, verified returning 401 when signed out
+- [x] **Range-scoped totals** — `workspace_totals_for_range` RPC
+- [x] **RLS verified live** — cross-tenant read/update/delete denied, 7
+      invariants rejected, reconciliation checked
+- [x] **Seed script** — `npm run seed`, asserts the ADR-012 invariant
 
-### Blocked
+### Blocked on one thing
 
-`.env.local` does not exist, so the app has never been loaded in a browser.
-Everything below is verified by build, tests, and live-database probes; nothing
-is verified through the UI yet.
+The app renders and the API correctly rejects unauthenticated access, but **no
+signed-in session has been exercised yet.**
 
-Required to unblock:
+Free-tier Supabase caps outbound email, so signup returns
+`429 over_email_send_rate_limit` and no confirmation link is ever sent. Writing
+rows into `auth.users` by hand is not a workaround: GoTrue keeps
+`auth.identities.email` as a generated column and returns
+`500 Database error querying schema` for a hand-made identity row.
 
-1. Copy `.env.example` to `.env.local` with the project URL and publishable key
-2. `NEXT_PUBLIC_SITE_URL` must match a Supabase Redirect URL exactly
-3. Set the Site URL in the Supabase dashboard to the same value
-4. `npm run dev`, then sign up and add a transaction
+Two supported ways out, either is enough:
+
+1. **Add a service-role key** and run `npm run seed`. One line in `.env.local`:
+
+   ```
+   SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
+   ```
+
+   The script uses `auth.admin.createUser({ email_confirm: true })`, which
+   bypasses email entirely.
+
+2. **Disable "Confirm email"** in Supabase → Authentication → Providers →
+   Email. Signup then returns a session immediately. Simplest for local work,
+   but must be turned back on before any public launch.
 
 Charts come after the data is trustworthy. A chart of a wrong number is worse
 than no chart.

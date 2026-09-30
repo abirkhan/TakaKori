@@ -1,0 +1,26 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - link [ref=e4] [cursor=pointer]:
+      - /url: /
+      - heading "TakaKori" [level=1] [ref=e5]
+      - paragraph [ref=e6]: Track where your money goes
+    - generic [ref=e7]:
+      - heading "Create an account" [level=2] [ref=e8]
+      - alert [ref=e31]: Email address "e2e1790797277878@takakori.test" is invalid
+      - generic [ref=e9]:
+        - generic [ref=e10]: Name
+        - textbox "Name" [ref=e11]
+      - generic [ref=e12]:
+        - generic [ref=e13]: Email
+        - textbox "Email" [ref=e14]
+      - generic [ref=e15]:
+        - generic [ref=e16]: Password
+        - textbox "Password At least 8 characters" [ref=e17]
+        - generic [ref=e18]: At least 8 characters
+      - button "Create account" [ref=e19]
+      - paragraph [ref=e20]:
+        - text: Already have an account?
+        - link "Sign in" [ref=e21] [cursor=pointer]:
+          - /url: /login
+  - button "Open Next.js Dev Tools" [ref=e27] [cursor=pointer]
+  - alert [ref=e32]
