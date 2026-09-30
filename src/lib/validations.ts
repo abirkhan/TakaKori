@@ -68,54 +68,59 @@ const transactionFields = {
   occurredOn: isoDateSchema,
 }
 
-/**
- * Cross-field rules, mirroring the database CHECK constraints so the user gets
- * a useful message instead of a raw Postgres error. The database remains the
- * source of truth; this only improves the feedback loop.
- */
-function refineTransactionShape(schema: z.ZodObject<z.ZodRawShape>) {
-  return schema.superRefine((data, ctx) => {
-    if (data.type === 'transfer') {
-      if (!data.counterpartyAccountId) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['counterpartyAccountId'],
-          message: 'A transfer needs a destination account',
-        })
-      } else if (data.counterpartyAccountId === data.accountId) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['counterpartyAccountId'],
-          message: 'Source and destination must be different accounts',
-        })
-      }
-    } else if (data.counterpartyAccountId) {
+/** Flatten a Zod error to one message per field, for form display. */
+export function fieldErrorsFrom(error: z.ZodError): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const issue of error.issues) {
+    const key = issue.path.join('.') || '_'
+    // Keep the first message per field; a form shows one line per field.
+    if (!result[key]) result[key] = issue.message
+  }
+  return result
+}
+
+export const createTransactionSchema = z.object(transactionFields).superRefine((data, ctx) => {
+  // Cross-field rules, mirroring the database CHECK constraints so the user
+  // gets a useful message instead of a raw Postgres error. The database
+  // remains the source of truth; this only improves the feedback loop.
+  if (data.type === 'transfer') {
+    if (!data.counterpartyAccountId) {
       ctx.addIssue({
         code: 'custom',
         path: ['counterpartyAccountId'],
-        message: 'Only a transfer can have a destination account',
+        message: 'A transfer needs a destination account',
       })
-    }
-
-    if (data.type !== 'transfer' && !data.categoryId) {
+    } else if (data.counterpartyAccountId === data.accountId) {
       ctx.addIssue({
         code: 'custom',
-        path: ['categoryId'],
-        message: 'Income and expense need a category',
+        path: ['counterpartyAccountId'],
+        message: 'Source and destination must be different accounts',
       })
     }
+  } else if (data.counterpartyAccountId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['counterpartyAccountId'],
+      message: 'Only a transfer can have a destination account',
+    })
+  }
 
-    if (data.type === 'transfer' && data.categoryId) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['categoryId'],
-        message: 'A transfer cannot have a category',
-      })
-    }
-  })
-}
+  if (data.type !== 'transfer' && !data.categoryId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['categoryId'],
+      message: 'Income and expense need a category',
+    })
+  }
 
-export const createTransactionSchema = refineTransactionShape(z.object(transactionFields))
+  if (data.type === 'transfer' && data.categoryId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['categoryId'],
+      message: 'A transfer cannot have a category',
+    })
+  }
+})
 
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>
 

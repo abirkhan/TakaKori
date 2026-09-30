@@ -22,17 +22,34 @@ Status: **Phase 0 complete**, Phase 1 next.
 
 Goal: one user can sign up, add a transaction, and see it on a dashboard.
 
-1. **Auth pages** — signup, login, logout, email confirmation, password reset
-   (auth routes and UI; `proxy.ts` guard already exists)
-2. **Google OAuth** — callback route; biggest adoption win for a public audience
-3. **Transactions CRUD** — list, create, edit, delete via Server Actions
-4. **Accounts CRUD** — already in the schema and seeded at signup
-5. **Categories** — seeded; add rename and create
-6. **Dashboard** — balance, this month's income/expense/savings from
-   `workspace_totals`, recent transactions
-7. **Filters and search** — date range, type, category, account
-8. **CSV export** — users must be able to get their data out
-9. **RLS tests** — two users, cross-tenant denial, against the linked project
+- [x] **Auth pages** — signup, login, logout, email confirmation, password reset
+- [x] **Transactions CRUD** — create, list, delete via Server Actions
+- [x] **Accounts CRUD** — create and list; schema already seeded at signup
+- [x] **Categories** — create and list; rename still to do
+- [x] **Dashboard** — total balance, month income/expense/savings, recent
+      transactions, account balances
+- [x] **Range-scoped totals** — `workspace_totals_for_range` RPC, since
+      `workspace_totals` is lifetime-only and cannot answer "this month"
+- [x] **RLS verified live** — two users, cross-tenant read/update/delete denied,
+      7 row-shape invariants rejected, reconciliation checked
+- [ ] **Edit transaction** — action exists; no UI yet
+- [ ] **Filters and search** — date range, type, category, account
+- [ ] **CSV export** — users must be able to get their data out
+- [ ] **Google OAuth** — biggest adoption win for a public audience
+- [ ] **Browser verification** — blocked on `.env.local`
+
+### Blocked
+
+`.env.local` does not exist, so the app has never been loaded in a browser.
+Everything below is verified by build, tests, and live-database probes; nothing
+is verified through the UI yet.
+
+Required to unblock:
+
+1. Copy `.env.example` to `.env.local` with the project URL and publishable key
+2. `NEXT_PUBLIC_SITE_URL` must match a Supabase Redirect URL exactly
+3. Set the Site URL in the Supabase dashboard to the same value
+4. `npm run dev`, then sign up and add a transaction
 
 Charts come after the data is trustworthy. A chart of a wrong number is worse
 than no chart.

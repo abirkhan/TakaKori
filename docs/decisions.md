@@ -190,3 +190,74 @@ deterministic.
 **Consequence:** Test any new display helper against the exact expected string.
 A test that checks "contains the symbol" would pass under `en` fallback and miss
 the grouping bug.
+---
+
+## ADR-012 - Database views are verified against seeded data, not by inspection
+
+**Status:** Accepted
+
+**Decision:** Every view is exercised with realistic data before it is trusted,
+and a reconciliation invariant is asserted.
+
+**Reason:** `account_balances` shipped with a defect that no amount of reading
+would have caught. The view attributed income in the same UNION branch as
+transfer inflows, selecting `counterparty_account_id as account_id`. Income rows
+have `counterparty_account_id = NULL`, so every income row was assigned to a NULL
+account and vanished from the LEFT JOIN.
+
+With income 80,000 and expenses totalling 5,499, Cash reported **-10,499**
+instead of **69,501**. The view compiled, returned rows, and looked entirely
+plausible. Only seeding real data exposed it.
+
+**The reconciliation invariant**, worth re-asserting after any change to these
+views:
+
+    sum(account_balances.balance) == lifetime(total_income) - lifetime(total_expense)
+
+It holds because transfers move value between accounts and net to zero. Any
+accounting view that violates it is wrong, even if every individual number looks
+plausible.
+
+**Consequence:** A view is not done until it has been run against data with
+income, expense, transfer, and multi-account movement.
+
+---
+
+## ADR-013 - CHECK constraints cannot contain subqueries
+
+**Status:** Accepted
+
+**Decision:** `profiles.timezone` is validated by a trigger, not a CHECK
+constraint.
+
+**Reason:** The original migration used
+`check (timezone = any (select name from pg_timezone_names))`. PostgreSQL rejects
+this outright - subqueries are not permitted in CHECK - and the migration failed
+to apply with `0A000: cannot use subquery in check constraint`. `pg_timezone_names`
+is a view, so it cannot be referenced from a CHECK at all.
+
+**Consequence:** `public.validate_timezone()` runs BEFORE INSERT OR UPDATE and
+raises `check_violation`. Reach for a trigger, not a CHECK, whenever validation
+needs to consult another relation.
+
+---
+
+## ADR-014 - Auth confirmation works without dashboard configuration
+
+**Status:** Accepted
+
+**Decision:** Email confirmation redirects to `/auth/callback`, a Client
+Component that exchanges the URL-fragment token via `supabase.auth.getSession()`.
+
+**Reason:** Supabase supports two flows. The token_hash flow is more robust -
+a Route Handler sets cookies server-side - but it requires editing the "Confirm
+signup" email template in the dashboard to send
+`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`. That is an
+easy step to miss, and when it is missed email confirmation silently breaks for
+every new user.
+
+The fragment flow works with the default template and no dashboard changes.
+
+**Consequence:** `src/app/auth/confirm/route.ts` implements the token_hash flow
+and can be enabled later by changing one email template and one redirect URL.
+Do not delete it.

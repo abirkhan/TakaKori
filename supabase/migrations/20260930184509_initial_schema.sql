@@ -27,9 +27,7 @@ create table if not exists public.profiles (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
 
-  constraint profiles_currency_check check (char_length(currency) = 3),
-  -- Reject a bad timezone early rather than failing at query time.
-  constraint profiles_timezone_check check (timezone = any (select name from pg_timezone_names))
+  constraint profiles_currency_check check (char_length(currency) = 3)
 );
 
 comment on column public.profiles.timezone is
@@ -166,6 +164,30 @@ create index if not exists transactions_account_id_idx
 create index if not exists transactions_category_id_idx
   on public.transactions (category_id)
   where category_id is not null;
+
+-- ---------------------------------------------------------------------------
+-- Timezone validation
+--
+-- A CHECK constraint cannot do this: PostgreSQL rejects subqueries in CHECK, and
+-- pg_timezone_names is a view. A trigger can, so validation happens here.
+-- A bad timezone otherwise surfaces much later as a wrong month boundary.
+-- ---------------------------------------------------------------------------
+create or replace function public.validate_timezone()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (select 1 from pg_timezone_names where name = new.timezone) then
+    raise exception 'unknown timezone: %', new.timezone
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger profiles_validate_timezone
+  before insert or update on public.profiles
+  for each row execute function public.validate_timezone();
 
 -- ---------------------------------------------------------------------------
 -- updated_at maintenance

@@ -1,10 +1,11 @@
 /**
- * Browser Supabase client.
+ * A Supabase client typed against the real schema.
  *
- * Runs in Client Components. Session is persisted in cookies so that the
- * server can read it during SSR.
- *
- * Never import the service-role key here. This client is public by definition.
+ * Created without a Database generic, because supabase-js types `numeric` as
+ * `number` while the wire format is a string. Handing every call site a
+ * misleading type is worse than no type: the money module exists precisely
+ * because that value must not be treated as a number. TypeScript still catches
+ * column-name typos, which is the main value here.
  */
 import { createBrowserClient } from '@supabase/ssr'
 
