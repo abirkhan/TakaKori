@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { siteUrl } from '@/lib/site-url'
 
 /**
  * Starts the Google OAuth PKCE flow.
@@ -25,7 +26,11 @@ export async function GET(request: NextRequest) {
       // Server-side only: the browser must not start the flow, or the PKCE
       // verifier never lands in a cookie the callback can read.
       skipBrowserRedirect: true,
-      redirectTo: `${request.nextUrl.origin}/auth/callback/google?next=${encodeURIComponent(safeNext)}`,
+      // From the configured site URL, never request.nextUrl.origin. On Netlify
+      // the incoming Host header resolves to the deploy URL, so using it sent
+      // the OAuth callback to a preview domain and the session cookie landed on
+      // the wrong host. See src/lib/site-url.ts.
+      redirectTo: `${siteUrl()}/auth/callback/google?next=${encodeURIComponent(safeNext)}`,
     },
   })
 

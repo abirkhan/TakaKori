@@ -120,19 +120,34 @@ signed-in user under RLS.
 
 ### Before a real public launch
 
-1. **Google OAuth** — enable the provider in the Supabase dashboard and
-   register `{SITE_URL}/auth/callback/google`.
-2. **Supabase redirect allowlist** — add `https://takakori.netlify.app/**` to
-   Authentication → URL Configuration. Sign-in works without it, but email
-   confirmation and password reset do not.
-3. **Free tier pauses** — a free Supabase project pauses after roughly a week of
-   inactivity. A paused project means signed-in users see errors rather than an
-   empty dashboard. Upgrade, or warn users, before announcing the site.
-4. **CI is not running yet** — `.github/workflows/ci.yml` is written but
-   unpushed. It needs `gh auth refresh -h github.com -s workflow` first, which
-   is interactive. It should run `npm run verify`; E2E needs a browser and a
-   signed-in test account, so it stays a local command until a CI secret is set
-   up deliberately.
+Google OAuth and the redirect allowlist were both **already correct** and needed no
+dashboard changes. Verified rather than assumed:
+
+- `GET /auth/v1/settings` reports `"google": true`, and
+  `/auth/v1/authorize?provider=google` returns a real Google client id
+  (`955264998034-…apps.googleusercontent.com`).
+- The authorize call passes `redirect_to=https://takakori.netlify.app/auth/callback/google`
+  through to Google unchanged, which only happens when the allowlist already
+  accepts it. A missing entry would have been replaced with the site URL.
+- Driving "Continue with Google" in a browser reaches Google's real sign-in page
+  with no `redirect_uri_mismatch`, so the Supabase callback is registered in
+  Google Cloud too.
+
+That audit found a real bug anyway. The Google route built its callback from
+`request.nextUrl.origin` — the incoming Host header, which on Netlify resolves to
+the deploy URL — so the deploy preview produced an OAuth callback aimed at
+`6abe50ca--takakori.netlify.app` instead of production. Fixed in ADR-025; all
+auth redirects now come from `NEXT_PUBLIC_SITE_URL`, and a missing value throws
+in production rather than failing silently.
+
+1. ~~**Google OAuth**~~ — already enabled and working. No action needed.
+2. ~~**Supabase redirect allowlist**~~ — already accepts the production callback.
+3. ~~**Free tier pauses**~~ — accepted as an acceptable trade-off for a personal
+   app. A pause shows signed-in users an error rather than an empty dashboard, so
+   it is a known cost rather than a blocker.
+4. **CI** — replaced. Netlify's build now runs `npm run verify`, so every push is
+   gated without needing the `workflow` OAuth scope (ADR-024). The workflow file
+   is no longer needed and has been removed.
 
 ---
 

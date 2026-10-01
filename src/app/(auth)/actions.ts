@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { siteUrl } from '@/lib/site-url'
 
 /**
  * Auth server actions.
@@ -82,23 +83,6 @@ export async function signUp(_prev: ActionState, formData: FormData): Promise<Ac
   // No error means the user was created. If email confirmation is enabled they
   // must verify before they can sign in; the session is null in that case.
   return { success: 'Account created. Check your email to confirm your address.' }
-}
-
-/**
- * Absolute origin of this deployment, used for auth redirect URLs.
- *
- * Supabase requires an exact match against its Redirect URL allowlist, so a
- * wrong or missing SITE_URL produces a link that silently fails. Falls back to
- * localhost so local development works without extra configuration.
- */
-function siteUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL
-  if (configured) return configured.replace(/\/$/, '')
-
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
-  if (process.env.URL) return process.env.URL.replace(/\/$/, '')
-
-  return 'http://localhost:3000'
 }
 
 const signInSchema = z.object({

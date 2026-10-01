@@ -1,7 +1,12 @@
 # Netlify deployment
 #
 # @netlify/plugin-nextjs is installed as a dev dependency and detected
-# automatically. No build command override is needed: the plugin sets it.
+# automatically.
+#
+# The build command is `verify`, not `build`. Netlify already builds on every
+# push, so making that build the gate means a type error, a lint error, or a
+# failing test stops the deploy — no GitHub Actions workflow and no `workflow`
+# OAuth scope required. See docs/decisions.md ADR-024.
 #
 # Required environment variables (set in the Netlify UI, not in this file):
 #   NEXT_PUBLIC_SUPABASE_URL
@@ -13,7 +18,9 @@
 # under RLS.
 
 [build]
-  command = "npm run build"
+  # verify = typecheck → lint → test → build. The trailing build is the one
+  # @netlify/plugin-nextjs would otherwise set for us.
+  command = "npm run verify"
 
 [build.environment]
   NODE_VERSION = "24"

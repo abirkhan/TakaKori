@@ -472,6 +472,61 @@ not reproducible locally.
 
 ---
 
+## ADR-024 - Netlify's build is the CI gate, not GitHub Actions
+
+**Status:** Accepted
+
+**Decision:** `netlify.toml` sets `command = "npm run verify"`, so every push is
+gated by typecheck, lint, unit tests, and the production build. No GitHub Actions
+workflow is used.
+
+**Reason:** Netlify already builds on every push to `main` and already blocks the
+deploy when the build fails. Making that build run `verify` gives the same
+guarantee a CI workflow would, for a project that receives a handful of pushes a
+week. The only thing given up is a status badge and per-pull-request checks.
+
+This matters because the `workflow` OAuth scope cannot be granted non-
+interactively: it needs a browser device-login, which is exactly the kind of
+manual step that quietly never happens. A gate that depends on someone completing
+a browser dance is a gate that silently does not run. Better to have the gate
+wired into a system that is already running.
+
+**Consequence:** No check on a pull request, only on push. Branch previews are
+still built and gated, since Netlify builds those too. E2E stays out of it: it
+needs a browser and a signed-in account, and adding those as CI secrets would
+widen the blast radius of a leaked repository for a test suite that already runs
+locally in about a minute.
+
+---
+
+## ADR-025 - One configured origin for every auth redirect URL
+
+**Status:** Accepted
+
+**Decision:** All auth redirect URLs are built from `NEXT_PUBLIC_SITE_URL` via
+`src/lib/site-url.ts`. `request.nextUrl.origin`, `VERCEL_URL`, and Netlify's
+`URL` are never used for them. A missing value throws in production.
+
+**Reason:** There were two sources of truth. The email flows read the configured
+variable; the Google OAuth route built its callback from the incoming Host
+header. On Netlify the Host header resolves to the deploy URL, so hitting the
+deploy preview silently produced an OAuth callback pointing at
+`6abe50ca--takakori.netlify.app` instead of production. Supabase accepted it, the
+flow started, and the session cookie would have been set on the wrong host. The
+fallback chain was also aimed at the wrong platform: `VERCEL_URL` for a project
+that deploys to Netlify, and Netlify's `URL`, which is the deploy URL by design.
+
+A wrong redirect origin is the worst kind of misconfiguration because it does not
+look wrong. The URL is well-formed, Supabase returns success, the email is sent,
+and the link simply does nothing when clicked. Failing loudly at the point of
+misconfiguration is worth an exception page.
+
+**Consequence:** `NEXT_PUBLIC_SITE_URL` becomes a hard requirement for any
+deployed environment. That is correct — it is also what the Supabase allowlist is
+matched against, so without it no auth flow can work.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted
