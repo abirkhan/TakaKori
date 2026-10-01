@@ -88,10 +88,35 @@ replace if reports ever need genuinely complex charts.
 
 ### Still open
 
-- [ ] **Recurring transactions** — needs a new table and a materialisation job
-- [ ] **Budgets** — needs a table plus a monthly comparison against actuals
 - [ ] **Google OAuth** — provider must be enabled in the Supabase dashboard
 - [ ] **Netlify** — not connected; needed for deploy previews
+
+---
+
+## Phase 3 — Budgets and recurring ✅
+
+- [x] **Budgets** — per-category or overall, with spend, remaining, percent used
+- [x] **Pace projection** — daily rate and projected month-end spend, because
+      "3,000 of 10,000" is not actionable on its own
+- [x] **Recurring rules** — daily/weekly/monthly/yearly with an interval
+- [x] **Predict and confirm** — nothing posts automatically; one tap writes the
+      real transaction (ADR-016)
+- [x] **Month-end clamping** — a 31st anchor lands on 28/29 February rather than
+      overflowing into March or skipping the month
+- [x] **Idempotent posting** — a watermark makes a replayed or double-clicked
+      occurrence match zero rows instead of duplicating a financial record
+
+Verified against the database: 11 constraints rejected as designed, including an
+income-category budget, duplicate overall budgets, a transfer rule with no
+destination, and a `last_posted_on` earlier than the anchor. Duplicate
+protection proven by replaying a posted occurrence and confirming the guard
+blocks it while a later occurrence still succeeds.
+
+Two bugs found and fixed during this phase:
+
+- Weekly and daily rules rounded the elapsed interval count to zero, returning
+  the anchor date — which is by definition before the cursor.
+- Budget days-elapsed was exclusive, understating the daily rate by a day.
 
 The schema already supports transfers; only the UI is missing.
 

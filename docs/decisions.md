@@ -298,3 +298,72 @@ must coalesce each input, not the combined expression. This is also why
 JavaScript is a poor model for reasoning about SQL NULL: `null - 3500.5` is
 `-3500.5` in JS but NULL in SQL. When checking SQL null behaviour, model the
 NULL propagation explicitly rather than translating the expression to JS.
+
+---
+
+## ADR-016 - Recurring transactions predict, they do not auto-post
+
+**Status:** Accepted
+
+**Decision:** A recurring rule stores a schedule. Upcoming occurrences are
+predicted and shown as due. Nothing writes a transaction until the user posts
+it.
+
+**Reason:** A ledger records what actually happened. Auto-inserting a "salary"
+row on the 1st asserts that money arrived even when payment was late or the
+amount changed, and the balance is wrong in between. It also makes exactly-once
+behaviour genuinely hard: a network retry, a clock skew or a double-tap would
+each duplicate a financial record, and there is no natural place to enforce it.
+
+Predict-and-confirm removes the whole class of problem. The user states the
+payment happened; only then is a row written.
+
+**Idempotency.** `last_posted_on` is a watermark. Posting advances it with
+`or(last_posted_on.is.null, last_posted_on.lt.<date>)`, so a concurrent or
+replayed submission matches zero rows rather than writing a second transaction.
+Verified: replaying an already-posted occurrence is blocked, a stale watermark
+matches zero rows, and a genuinely later occurrence is still allowed. A trigger
+also rejects a `last_posted_on` earlier than `anchor_date`, which would otherwise
+permanently suppress every future occurrence.
+
+**Consequence:** There is no scheduler dependency - no pg_cron, no external cron,
+nothing to keep alive. This matters for the free-tier Netlify target.
+
+---
+
+## ADR-017 - Two partial unique indexes, not one, on budgets
+
+**Status:** Accepted
+
+**Decision:** `budgets_one_overall_per_workspace_idx` (where `category_id is null
+and is_active`) plus `budgets_one_per_category_idx` (where `category_id is not
+null and is_active`).
+
+**Reason:** NULLs are distinct in a Postgres unique index. A single unique index
+on `(workspace_id, category_id)` would permit unlimited overall budgets, because
+every NULL compares as different.
+
+**Consequence:** Adding a new "kind" of budget slot needs its own partial index.
+The application also surfaces the 23505 error as a readable message, but the
+index is what actually enforces it.
+
+---
+
+## ADR-018 - Budget pace counts today inclusively
+
+**Status:** Accepted
+
+**Decision:** Days elapsed is `daysBetween(monthStart, today) + 1`.
+
+**Reason:** On 5 October, five days of the month have been lived through, even
+though 5 October minus 1 October is four. Counting exclusively understated the
+daily rate by a day and made early-month pace look safer than it was.
+
+**Related bug found by seeded data:** budget spend originally ranged to the end
+of the month rather than to today, so a future-dated expense counted as already
+spent. On 1 October a single expense dated 3 October read as "?2,500 spent in
+one day" and projected ?77,500 against a ?3,000 budget. Spend now runs
+month-start to today.
+
+**Consequence:** A budget answers "how am I doing so far", not "what is booked
+for this month". Planned future spending belongs in the transactions list.
