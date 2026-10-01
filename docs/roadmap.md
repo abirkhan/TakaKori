@@ -93,6 +93,46 @@ replace if reports ever need genuinely complex charts.
 
 ---
 
+## Deployment ✅
+
+Live at **https://takakori.netlify.app** (deploy `6abe306f87836e0ce8e34269`,
+production context, branch `main`).
+
+Verified in production, not assumed from a green build:
+
+| Check                        | Result                                                |
+| ---------------------------- | ----------------------------------------------------- |
+| `/` and `/login`             | 200, form renders                                     |
+| Unauthenticated `/dashboard` | redirects to `/login` — `proxy.ts` works on Netlify   |
+| Sign in                      | session established, dashboard renders                |
+| Server Action write          | ৳1,234.56 stored exactly                              |
+| CSV export                   | 200, correct filename, 12 rows, no truncation warning |
+| All 8 routes                 | render without server errors                          |
+
+Environment variables set on the Netlify site for `builds` and `runtime`:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_SITE_URL=https://takakori.netlify.app`
+
+There is deliberately **no service-role key**. Every query runs as the
+signed-in user under RLS.
+
+### Before a real public launch
+
+1. **Google OAuth** — enable the provider in the Supabase dashboard and
+   register `{SITE_URL}/auth/callback/google`.
+2. **Supabase redirect allowlist** — add `https://takakori.netlify.app/**` to
+   Authentication → URL Configuration. Sign-in works without it, but email
+   confirmation and password reset do not.
+3. **Free tier pauses** — a free Supabase project pauses after roughly a week of
+   inactivity. A paused project means signed-in users see errors rather than an
+   empty dashboard. Upgrade, or warn users, before announcing the site.
+4. **CI is not running yet** — `.github/workflows/ci.yml` is written but
+   unpushed. It needs `gh auth refresh -h github.com -s workflow` first.
+
+---
+
 ## Phase 3 — Budgets and recurring ✅
 
 - [x] **Budgets** — per-category or overall, with spend, remaining, percent used
