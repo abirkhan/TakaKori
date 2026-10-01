@@ -129,7 +129,10 @@ signed-in user under RLS.
    inactivity. A paused project means signed-in users see errors rather than an
    empty dashboard. Upgrade, or warn users, before announcing the site.
 4. **CI is not running yet** — `.github/workflows/ci.yml` is written but
-   unpushed. It needs `gh auth refresh -h github.com -s workflow` first.
+   unpushed. It needs `gh auth refresh -h github.com -s workflow` first, which
+   is interactive. It should run `npm run verify`; E2E needs a browser and a
+   signed-in test account, so it stays a local command until a CI secret is set
+   up deliberately.
 
 ---
 
@@ -173,6 +176,40 @@ The schema already supports transfers; only the UI is missing.
 - Bangla (`bn-BD`) localisation
 - Onboarding
 - Sentry for production errors
+
+## End-to-end tests ✅
+
+`npm run test:e2e` drives a real browser against the linked development
+project — 10 tests, all passing. Credentials come from `.env.test`
+(gitignored); see `.env.test.example`.
+
+Covered: unauthenticated redirect, dashboard rendering, creating an expense and
+watching the total move, a transfer moving money between accounts **without**
+changing the total, an invalid amount being rejected without a 500, the period
+filter, CSV export, reports, budgets, recurring, and sign-out.
+
+The transfer test is the one that matters most. It asserts the central
+accounting guarantee (ADR-005) from the rendered strings rather than from
+internal state: the total is unchanged to the poisha while the destination
+account gains exactly 250,000.
+
+Two real bugs surfaced here that 124 unit tests and a green `verify` both
+missed:
+
+- **The filter bar latched into `disabled` after one change.** `setPending(true)`
+  was never reset, so a user could set a period and then never a category. Fixed
+  with `useTransition` (ADR-022).
+- **Transfers were never exercised through the UI at all.** Verified manually
+  first: Cash and Bank moved ৳2,500 while total, income, and expense all stayed
+  put.
+
+Cleanup runs through the app's own delete button, not a test-only route or a
+service-role script — see the reasoning in the `testing` skill. The suite leaves
+the account exactly as it found it: verified at 10 rows and zero leftovers after
+a full run.
+
+Note that `npm run verify` does not run E2E, because it needs a browser and a
+live database.
 
 ## Not planned
 

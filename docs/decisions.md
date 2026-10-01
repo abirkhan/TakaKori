@@ -419,6 +419,29 @@ The message is user-facing, so query layer errors must not leak schema detail.
 
 ---
 
+## ADR-022 - Pending state comes from `useTransition`, never a manual flag
+
+**Status:** Accepted
+
+**Decision:** Client components that drive a `router.push` disable themselves with
+`useTransition`'s `isPending`, not with a local `useState` flag they set themselves.
+
+**Reason:** The transaction filter bar disabled its four `<select>`s by calling
+`setPending(true)` and then pushing. Nothing ever set it back, so `pending` latched
+on after the first filter change and the entire bar stayed `disabled` for the rest
+of the page's life. A user could set a period but then never a type or category
+without reloading — a silent dead end in a shipped feature that no unit test
+covered, because the bug lived in a component nobody was rendering.
+
+`useTransition` ties the flag to the navigation itself: it is true while the
+transition runs and clears when the route settles, so there is no second code
+path that has to remember to reset it.
+
+**Consequence:** Any new client component that navigates must use a transition for
+its pending state. A hand-rolled flag is a latch waiting to happen.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted

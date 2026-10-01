@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useTransition } from 'react'
 import type { Account, Category } from '@/lib/queries/reference'
 import type { TransactionType } from '@/types/database'
 
@@ -29,12 +29,11 @@ export function TransactionFilters({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [pending, setPending] = useState(false)
+  const [pending, startTransition] = useTransition()
 
   const current = (key: string) => searchParams.get(key) ?? ''
 
   function update(key: string, value: string) {
-    setPending(true)
     const params = new URLSearchParams(searchParams.toString())
     if (value) {
       params.set(key, value)
@@ -42,7 +41,13 @@ export function TransactionFilters({
       params.delete(key)
     }
     params.delete('offset')
-    router.push(`/transactions?${params.toString()}`)
+    // Wrapped in a transition so `pending` reflects the navigation and clears
+    // itself when the route settles. A bare setState(true) here would latch the
+    // whole filter bar into `disabled` after the first change, leaving the user
+    // unable to set a second filter without a full reload.
+    startTransition(() => {
+      router.push(`/transactions?${params.toString()}`)
+    })
   }
 
   const hasFilters =
@@ -121,8 +126,9 @@ export function TransactionFilters({
         <button
           type="button"
           onClick={() => {
-            setPending(true)
-            router.push('/transactions')
+            startTransition(() => {
+              router.push('/transactions')
+            })
           }}
           className="self-start text-sm underline"
         >
