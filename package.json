@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run typecheck && npm run lint && npm run test",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -14,7 +15,7 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "verify": "npm run build",
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {

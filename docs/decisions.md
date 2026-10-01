@@ -476,26 +476,41 @@ not reproducible locally.
 
 **Status:** Accepted
 
-**Decision:** `netlify.toml` sets `command = "npm run verify"`, so every push is
-gated by typecheck, lint, unit tests, and the production build. No GitHub Actions
-workflow is used.
+**Decision:** The gate lives in the npm `prebuild` hook (typecheck → lint → test),
+which runs ahead of every `next build` including Netlify's. `netlify.toml` sets
+**no** `command`. No GitHub Actions workflow is used.
 
-**Reason:** Netlify already builds on every push to `main` and already blocks the
-deploy when the build fails. Making that build run `verify` gives the same
-guarantee a CI workflow would, for a project that receives a handful of pushes a
-week. The only thing given up is a status badge and per-pull-request checks.
+**Reason, first half:** Netlify already builds on every push to `main` and
+already blocks the deploy when the build fails, so the guarantee a CI workflow
+would provide is available without one. This matters because the `workflow`
+OAuth scope cannot be granted non-interactively — it needs a browser
+device-login, which is exactly the kind of manual step that quietly never
+happens. A gate that depends on someone completing a browser dance is a gate that
+silently does not run.
 
-This matters because the `workflow` OAuth scope cannot be granted non-
-interactively: it needs a browser device-login, which is exactly the kind of
-manual step that quietly never happens. A gate that depends on someone completing
-a browser dance is a gate that silently does not run. Better to have the gate
-wired into a system that is already running.
+**Reason, second half — the part that cost two failed deploys:** the obvious
+implementation, `command = "npm run verify"`, does not work. Overriding the build
+command makes the build fail with a bare `exit code 2` _after_ the command has
+already succeeded. The way that was established: give each step its own exit
+code (`npm run lint || exit 12; …`) and observe that none of 11, 12, 13, or 14
+is ever reported. Every step passes; the failure comes from afterwards, from
+`@netlify/plugin-nextjs`, which sets the build command itself and does not
+cope with an override.
 
-**Consequence:** No check on a pull request, only on push. Branch previews are
-still built and gated, since Netlify builds those too. E2E stays out of it: it
-needs a browser and a signed-in account, and adding those as CI secrets would
-widen the blast radius of a leaked repository for a test suite that already runs
-locally in about a minute.
+`prebuild` is the fix because it changes nothing Netlify controls. The plugin
+still runs the build it expects, and the gate still runs first because npm runs
+`prebuild` before `build` unconditionally.
+
+**Consequence:** No check on a pull request, only on push; branch previews are
+still built and gated, since Netlify builds those too. Running `next build`
+directly bypasses the gate, so use `npm run build`. E2E stays out of it: it needs
+a browser and a signed-in account, and adding those as CI secrets would widen
+the blast radius of a leaked repository for a suite that runs locally in about a
+minute.
+
+**Consequence:** `verify` is now an alias for `npm run build`, which is
+potentially confusing — the name promises more than the script does. It is kept
+because the gate is what people actually mean by "check this".
 
 ---
 
