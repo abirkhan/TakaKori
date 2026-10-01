@@ -65,7 +65,33 @@ Two supported ways out, either is enough:
 Charts come after the data is trustworthy. A chart of a wrong number is worse
 than no chart.
 
-## Phase 2 — Accounts and transfers
+## Phase 2 — Reports ✅
+
+- [x] **Period selection** — this month, this quarter, this year, last 12 months,
+      resolved server-side in the user's timezone
+- [x] **Income vs expense per month** — CSS bars, no charting library, plus a
+      real table for screen readers and precise figures
+- [x] **Where the money went / came from** — category breakdown with share
+- [x] **Savings rate** — shown as a percentage, negative when overspending
+- [x] **Empty months reported as zero** rather than omitted, so a saving streak
+      reads as a run of bars instead of collapsing to one
+- [x] **Orphaned transactions visible** — a deleted category shows as
+      "Uncategorised" rather than disappearing from the breakdown
+
+Verified in the running app: 80,000 income × 3 months against four expense
+categories, reconciling to the period total to the poisha.
+
+Deliberately no charting library. Both series are simple bars, and a library
+would add ~100 KB of client JavaScript to a mobile app aimed at users on metered
+connections. `components/reports/Charts.tsx` has one clear entry point to
+replace if reports ever need genuinely complex charts.
+
+### Still open
+
+- [ ] **Recurring transactions** — needs a new table and a materialisation job
+- [ ] **Budgets** — needs a table plus a monthly comparison against actuals
+- [ ] **Google OAuth** — provider must be enabled in the Supabase dashboard
+- [ ] **Netlify** — not connected; needed for deploy previews
 
 The schema already supports transfers; only the UI is missing.
 

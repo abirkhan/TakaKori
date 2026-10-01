@@ -26,6 +26,9 @@ export default async function DashboardLayout({
             <Link href="/categories" className="text-sm text-neutral-600 hover:text-black">
               Categories
             </Link>
+            <Link href="/reports" className="text-sm text-neutral-600 hover:text-black">
+              Reports
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3">

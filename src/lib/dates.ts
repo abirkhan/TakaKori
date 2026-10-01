@@ -19,6 +19,7 @@ export type DateRangePreset =
   | 'today'
   | 'week'
   | 'month'
+  | 'quarter'
   | 'year'
   | 'all'
   | 'custom'
@@ -95,8 +96,30 @@ export function resolveRange(
     return { from, to }
   }
 
+  if (preset === 'quarter') {
+    // Calendar quarters: Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec.
+    const firstMonthOfQuarter = Math.floor((parts.month - 1) / 3) * 3 + 1
+    const from = `${parts.year}-${pad(firstMonthOfQuarter)}-01`
+    // Month index is 1-based here, so month 12 becomes month 0 of year+1.
+    const lastDay = new Date(Date.UTC(parts.year, firstMonthOfQuarter + 2, 0)).getUTCDate()
+    const to = `${parts.year}-${pad(firstMonthOfQuarter + 2)}-${pad(lastDay)}`
+    return { from, to }
+  }
+
   // 'year'
   return { from: `${parts.year}-01-01`, to: `${parts.year}-12-31` }
+}
+
+/**
+ * The first day of the month N months before the month containing `reference`.
+ *
+ * Used to anchor a rolling window such as "last 6 months" without depending on
+ * a database or on the exact day of the month.
+ */
+export function startOfMonthOffset(reference: string, monthsBack: number): string {
+  const [y, m] = reference.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 - monthsBack, 1))
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-01`
 }
 
 interface CalendarParts {
