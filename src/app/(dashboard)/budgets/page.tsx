@@ -7,8 +7,14 @@ import { listBudgetsWithProgress } from '@/lib/queries/planning'
 import { BudgetForm } from '@/components/budgets/BudgetForm'
 import { BudgetCard } from '@/components/budgets/BudgetCard'
 
-export default async function BudgetsPage() {
+export default async function BudgetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { userId } = await requireUser()
+  const params = await searchParams
+  const error = typeof params.error === 'string' ? params.error : null
 
   const supabase = await createClient()
   const { data: profile } = await supabase
@@ -33,10 +39,18 @@ export default async function BudgetsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Budgets</h1>
         <p className="text-sm text-neutral-500">
-          Monthly limits for {today.slice(0, 7)}. Pace is projected from your daily
-          spending so far.
+          Monthly limits for {today.slice(0, 7)}. Pace is projected from your daily spending so far.
         </p>
       </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {error}
+        </p>
+      )}
 
       <section className="rounded border border-neutral-200 p-4">
         <BudgetForm categories={categories} />
@@ -49,11 +63,7 @@ export default async function BudgetsPage() {
       ) : (
         <section className="flex flex-col gap-4">
           {budgets.map((b) => (
-            <BudgetCard
-              key={b.id}
-              budget={b}
-              formatMoney={money}
-            />
+            <BudgetCard key={b.id} budget={b} formatMoney={money} />
           ))}
         </section>
       )}

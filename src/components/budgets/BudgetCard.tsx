@@ -43,9 +43,7 @@ export function BudgetCard({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-medium">
           {categoryName}
-          {isOverall && (
-            <span className="ml-2 text-xs font-normal text-neutral-400">overall</span>
-          )}
+          {isOverall && <span className="ml-2 text-xs font-normal text-neutral-400">overall</span>}
         </h2>
         <p className="text-sm tabular-nums">
           <span className="font-semibold">{formatMoney(spent)}</span>
@@ -63,15 +61,11 @@ export function BudgetCard({
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         <span className={overspent ? 'font-medium text-red-700' : 'text-neutral-600'}>
-          {overspent
-            ? `${formatMoney(-remaining)} over budget`
-            : `${formatMoney(remaining)} left`}
+          {overspent ? `${formatMoney(-remaining)} over budget` : `${formatMoney(remaining)} left`}
         </span>
         <span className="text-neutral-500">{percentUsed.toFixed(0)}% used</span>
 
-        {spent > 0 && (
-          <span className="text-neutral-500">{formatMoney(dailyRate)}/day so far</span>
-        )}
+        {spent > 0 && <span className="text-neutral-500">{formatMoney(dailyRate)}/day so far</span>}
 
         {projected !== null && (
           <span className={onTrackToOverspend ? 'font-medium text-amber-700' : 'text-neutral-500'}>
@@ -82,8 +76,8 @@ export function BudgetCard({
 
       {!overspent && projected !== null && onTrackToOverspend && (
         <p className="mt-3 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          You are spending faster than this budget allows. At {formatMoney(dailyRate)} a day
-          you would reach {formatMoney(projected)} by month end.
+          You are spending faster than this budget allows. At {formatMoney(dailyRate)} a day you
+          would reach {formatMoney(projected)} by month end.
         </p>
       )}
 

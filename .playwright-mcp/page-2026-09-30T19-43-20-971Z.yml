@@ -1,23 +1,23 @@
 - generic [active] [ref=f1e1]:
-  - generic [ref=f1e3]:
-    - link [ref=f1e4] [cursor=pointer]:
-      - /url: /
-      - heading "TakaKori" [level=1] [ref=f1e5]
-      - paragraph [ref=f1e6]: Track where your money goes
-    - generic [ref=f1e7]:
-      - heading "Sign in" [level=2] [ref=f1e8]
-      - alert [ref=f1e29]: Incorrect email or password.
-      - generic [ref=f1e9]:
-        - generic [ref=f1e10]: Email
-        - textbox "Email" [ref=f1e11]
-      - generic [ref=f1e12]:
-        - generic [ref=f1e13]: Password
-        - textbox "Password" [ref=f1e14]
-      - button "Sign in" [ref=f1e15]
-      - generic [ref=f1e16]:
-        - link "Create an account" [ref=f1e17] [cursor=pointer]:
-          - /url: /signup
-        - link "Forgot password?" [ref=f1e18] [cursor=pointer]:
-          - /url: /forgot-password
-  - button "Open Next.js Dev Tools" [ref=f1e24] [cursor=pointer]
-  - alert [ref=f1e28]
+    - generic [ref=f1e3]:
+        - link [ref=f1e4] [cursor=pointer]:
+            - /url: /
+            - heading "TakaKori" [level=1] [ref=f1e5]
+            - paragraph [ref=f1e6]: Track where your money goes
+        - generic [ref=f1e7]:
+            - heading "Sign in" [level=2] [ref=f1e8]
+            - alert [ref=f1e29]: Incorrect email or password.
+            - generic [ref=f1e9]:
+                - generic [ref=f1e10]: Email
+                - textbox "Email" [ref=f1e11]
+            - generic [ref=f1e12]:
+                - generic [ref=f1e13]: Password
+                - textbox "Password" [ref=f1e14]
+            - button "Sign in" [ref=f1e15]
+            - generic [ref=f1e16]:
+                - link "Create an account" [ref=f1e17] [cursor=pointer]:
+                    - /url: /signup
+                - link "Forgot password?" [ref=f1e18] [cursor=pointer]:
+                    - /url: /forgot-password
+    - button "Open Next.js Dev Tools" [ref=f1e24] [cursor=pointer]
+    - alert [ref=f1e28]

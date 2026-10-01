@@ -7,8 +7,14 @@ import { listAccounts, listCategories } from '@/lib/queries/reference'
 import { RecurringForm } from '@/components/recurring/RecurringForm'
 import { RecurringCard } from '@/components/recurring/RecurringCard'
 
-export default async function RecurringPage() {
+export default async function RecurringPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { userId } = await requireUser()
+  const params = await searchParams
+  const error = typeof params.error === 'string' ? params.error : null
 
   const supabase = await createClient()
   const { data: profile } = await supabase
@@ -35,10 +41,19 @@ export default async function RecurringPage() {
       <div>
         <h1 className="text-2xl font-semibold">Recurring</h1>
         <p className="text-sm text-neutral-500">
-          Nothing is added automatically. When a payment is due, post it yourself —
-          that keeps your records a record of what actually happened.
+          Nothing is added automatically. When a payment is due, post it yourself — that keeps your
+          records a record of what actually happened.
         </p>
       </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {error}
+        </p>
+      )}
 
       {dueCount > 0 && (
         <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -47,11 +62,7 @@ export default async function RecurringPage() {
       )}
 
       <section className="rounded border border-neutral-200 p-4">
-        <RecurringForm
-          accounts={accounts}
-          categories={categories}
-          today={today}
-        />
+        <RecurringForm accounts={accounts} categories={categories} today={today} />
       </section>
 
       {views.length === 0 ? (

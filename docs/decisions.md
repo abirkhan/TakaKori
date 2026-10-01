@@ -271,22 +271,23 @@ Do not delete it.
 **Decision:** `net_balance` is computed as
 
     coalesce(sum(amount) filter (where type = 'income'), 0)
-  - coalesce(sum(amount) filter (where type = 'expense'), 0)
+
+- coalesce(sum(amount) filter (where type = 'expense'), 0)
 
 never as `coalesce(sum(income) - sum(expense), 0)`.
 
 **Reason:** A filtered `SUM` with no matching rows returns NULL, and in SQL NULL
 propagates through arithmetic. `coalesce(NULL - 4500, 0)` is therefore `0`, not
-`-4500`. The outer coalesce only rescues the *result*, so it fires precisely when
+`-4500`. The outer coalesce only rescues the _result_, so it fires precisely when
 one side is missing and silently reports zero savings.
 
 Observed in the running app with a single 3,500.50 expense and no income:
 
-| case | buggy | correct |
-|---|---|---|
-| expense only | 0.00 | -3,500.50 |
-| income only | 0.00 | **80,000.00** |
-| both | 75,500.00 | 75,500.00 |
+| case         | buggy     | correct       |
+| ------------ | --------- | ------------- |
+| expense only | 0.00      | -3,500.50     |
+| income only  | 0.00      | **80,000.00** |
+| both         | 75,500.00 | 75,500.00     |
 
 The income-only case is the damaging one: a user with income but no expenses in
 the period would see zero savings instead of their full income. The bug is
@@ -367,3 +368,70 @@ month-start to today.
 
 **Consequence:** A budget answers "how am I doing so far", not "what is booked
 for this month". Planned future spending belongs in the transactions list.
+
+---
+
+## ADR-019 - A posted occurrence date is validated against the rule
+
+**Status:** Accepted
+
+**Decision:** `postRecurringOccurrence` confirms the requested date is a real
+occurrence of that rule before writing anything:
+
+```ts
+const expected = nextOccurrence(schedule, occurrenceDate)
+if (!expected || expected.date !== occurrenceDate) throw ...
+```
+
+**Reason:** The action accepts an occurrence date from the client, and the only
+guard at the time was `occurrenceDate > last_posted_on`. That guard is
+useless against a forged date, because a large date always satisfies it.
+
+For a monthly rule anchored on the 1st, a client could post `2026-12-25`:
+
+- a transaction was created for a day the rule never predicted
+- `last_posted_on` advanced to 2026-12-25
+- every genuine occurrence on or before that date became permanently suppressed
+
+One request silently corrupted both the ledger and the schedule. Fixed, with
+eight regression tests in `src/lib/occurrence-validation.test.ts` covering
+clamped, fortnightly, weekly and ended schedules, plus far-future dates.
+
+**Consequence:** Client-supplied identifiers are never trusted to be
+well-formed. A date is data to validate, not a fact to accept.
+
+---
+
+## ADR-020 - Form actions redirect with an error, never throw
+
+**Status:** Accepted
+
+**Decision:** Destructive form actions catch their errors and redirect back to
+the page with `?error=<message>`, which the page renders in an alert.
+
+**Reason:** A thrown Error from a Server Action used by a `<form>` becomes a 500
+and a full error page. For something as ordinary as deleting a row that was
+already gone, that is an alarming response to a routine race. `redirect()` is
+called outside the `try` so its control-flow throw is not swallowed.
+
+**Consequence:** Every page that hosts a destructive form reads `searchParams.error`.
+The message is user-facing, so query layer errors must not leak schema detail.
+
+---
+
+## ADR-021 - CSV export pages, and never truncates silently
+
+**Status:** Accepted
+
+**Decision:** Export fetches in 1,000-row pages until a short page proves the
+end. If the hard 10,000-row ceiling is reached, a `# WARNING` line is written
+into the file itself.
+
+**Reason:** A single `.limit()` produced a file that looked complete but was
+missing rows, with no way for the user to tell. Silent truncation in a
+data-portability feature is worse than an error: the user believes they have a
+complete backup and does not.
+
+Ordering is `occurred_on desc, id desc` because a non-unique sort column makes
+row order unstable across pages, which would drop or duplicate rows at a page
+boundary.

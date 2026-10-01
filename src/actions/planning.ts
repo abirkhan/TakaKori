@@ -1,9 +1,15 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { parseAmount, toNumericString } from '@/lib/money'
-import { isoDateSchema, uuidSchema, fieldErrorsFrom, transactionTypeSchema } from '@/lib/validations'
+import {
+  isoDateSchema,
+  uuidSchema,
+  fieldErrorsFrom,
+  transactionTypeSchema,
+} from '@/lib/validations'
 import {
   createBudget,
   createRecurring,
@@ -23,6 +29,17 @@ export interface ActionState {
   error?: string
   success?: string
   fieldErrors?: Record<string, string>
+}
+
+/**
+ * Message shown to the user when a form action fails.
+ *
+ * A thrown Error from a form action becomes a 500 and an error page, which is a
+ * terrible outcome for something as ordinary as deleting a row that was already
+ * gone. These actions redirect back with the reason instead.
+ */
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 const amountSchema = z
@@ -80,8 +97,22 @@ export async function createBudgetAction(
 }
 
 export async function deleteBudgetAction(formData: FormData): Promise<void> {
-  const id = uuidSchema.parse(formData.get('id'))
-  await deleteBudget(id)
+  const raw = formData.get('id')
+  const parsed = uuidSchema.safeParse(raw)
+  if (!parsed.success) {
+    redirect(`/budgets?error=${encodeURIComponent('Invalid budget id.')}`)
+  }
+
+  try {
+    await deleteBudget(parsed.data)
+  } catch (error) {
+    // redirect() is called outside the try so its control-flow throw is not
+    // swallowed by the catch.
+    redirect(
+      `/budgets?error=${encodeURIComponent(errorMessage(error, 'Could not remove the budget.'))}`,
+    )
+  }
+
   revalidatePath('/budgets')
 }
 
@@ -169,15 +200,21 @@ export async function createRecurringAction(
  * not here.
  */
 export async function postOccurrenceAction(formData: FormData): Promise<void> {
-  const id = uuidSchema.parse(formData.get('id'))
-  const occurrenceDate = isoDateSchema.parse(formData.get('occurrenceDate'))
+  const id = uuidSchema.safeParse(formData.get('id'))
+  const date = isoDateSchema.safeParse(formData.get('occurrenceDate'))
+
+  if (!id.success || !date.success) {
+    redirect(`/recurring?error=${encodeURIComponent('That occurrence is not valid.')}`)
+  }
 
   try {
-    await postRecurringOccurrence(id, occurrenceDate)
+    await postRecurringOccurrence(id.data, date.data)
   } catch (error) {
-    // Rethrowing a plain Error from a form action surfaces as a 500. Convert to
-    // something the user can act on instead.
-    throw new Error(error instanceof Error ? error.message : 'Could not post the transaction')
+    // Includes the two integrity guards: an already-posted occurrence, and a
+    // date that is not a real occurrence of this rule.
+    redirect(
+      `/recurring?error=${encodeURIComponent(errorMessage(error, 'Could not post the transaction.'))}`,
+    )
   }
 
   revalidatePath('/recurring')
@@ -186,7 +223,18 @@ export async function postOccurrenceAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteRecurringAction(formData: FormData): Promise<void> {
-  const id = uuidSchema.parse(formData.get('id'))
-  await deleteRecurring(id)
+  const parsed = uuidSchema.safeParse(formData.get('id'))
+  if (!parsed.success) {
+    redirect(`/recurring?error=${encodeURIComponent('Invalid rule id.')}`)
+  }
+
+  try {
+    await deleteRecurring(parsed.data)
+  } catch (error) {
+    redirect(
+      `/recurring?error=${encodeURIComponent(errorMessage(error, 'Could not delete the rule.'))}`,
+    )
+  }
+
   revalidatePath('/recurring')
 }

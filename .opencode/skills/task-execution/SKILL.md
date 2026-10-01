@@ -9,7 +9,7 @@ description: The read-plan-implement-verify-report workflow for any task in Taka
 
 1. **Read the relevant docs.** `docs/database.md` for schema work,
    `docs/security.md` for anything touching auth or data access,
-   `docs/architecture.md` for structure. `docs/decisions.md` records *why* — an
+   `docs/architecture.md` for structure. `docs/decisions.md` records _why_ — an
    ADR you have not read is an ADR you are about to violate.
 2. **Read the code you are about to change**, and the code that already does
    something similar. Match the existing pattern.

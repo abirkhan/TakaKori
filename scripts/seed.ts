@@ -62,7 +62,10 @@ async function main() {
       process.exit(1)
     }
     // Already exists — reuse it.
-    const { data: list, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
+    const { data: list, error: listError } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    })
     if (listError) {
       console.error('listUsers failed:', listError.message)
       process.exit(1)

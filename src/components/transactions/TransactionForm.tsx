@@ -37,7 +37,10 @@ export function TransactionForm({
       <h2 className="text-lg font-medium">Add transaction</h2>
 
       {state.error && (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {state.error}
         </p>
       )}
@@ -48,9 +51,7 @@ export function TransactionForm({
           <label
             key={value}
             className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
-              type === value
-                ? 'border-neutral-900 bg-neutral-900 text-white'
-                : 'border-neutral-300'
+              type === value ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-300'
             }`}
           >
             <input
@@ -83,11 +84,7 @@ export function TransactionForm({
 
       <label className="flex flex-col gap-1 text-sm">
         <span>Account</span>
-        <select
-          name="accountId"
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        >
+        <select name="accountId" required className="rounded border border-neutral-300 px-3 py-2">
           <option value="">Select an account</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
@@ -116,9 +113,7 @@ export function TransactionForm({
             ))}
           </select>
           {state.fieldErrors?.counterpartyAccountId && (
-            <span className="text-xs text-red-600">
-              {state.fieldErrors.counterpartyAccountId}
-            </span>
+            <span className="text-xs text-red-600">{state.fieldErrors.counterpartyAccountId}</span>
           )}
         </label>
       ) : (

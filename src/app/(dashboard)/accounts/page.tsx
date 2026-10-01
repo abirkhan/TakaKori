@@ -50,7 +50,10 @@ export default async function AccountsPage() {
       )}
 
       <p className="text-sm text-neutral-500">
-        Balances include transfers in both directions. <Link href="/dashboard" className="underline">Back to dashboard</Link>
+        Balances include transfers in both directions.{' '}
+        <Link href="/dashboard" className="underline">
+          Back to dashboard
+        </Link>
       </p>
     </div>
   )

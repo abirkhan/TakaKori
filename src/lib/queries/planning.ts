@@ -7,7 +7,12 @@
 
 import { requireWorkspaceId } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { dueOccurrences, upcomingOccurrences, type Frequency } from '@/lib/recurrence'
+import {
+  dueOccurrences,
+  nextOccurrence,
+  upcomingOccurrences,
+  type Frequency,
+} from '@/lib/recurrence'
 import { computeBudgetProgress, daysInCalendarMonth, monthStartOf } from '@/lib/budgets'
 import type { BudgetProgress } from '@/lib/budgets'
 import { toMinor, type Minor } from '@/lib/money'
@@ -34,9 +39,7 @@ export interface BudgetView extends BudgetProgress {
  * and the month bounds are resolved in the user's timezone so "this month"
  * means their month.
  */
-export async function listBudgetsWithProgress(
-  today: string,
-): Promise<BudgetView[]> {
+export async function listBudgetsWithProgress(today: string): Promise<BudgetView[]> {
   const workspaceId = await requireWorkspaceId()
   const supabase = await createClient()
 
@@ -65,10 +68,11 @@ export async function listBudgetsWithProgress(
   const spendThrough = today
 
   // Actual spend per category so far this month, computed in SQL.
-  const { data: spend, error: spendError } = await supabase.rpc(
-    'expense_by_category_for_range',
-    { target_workspace_id: workspaceId, range_from: monthStart, range_to: spendThrough },
-  )
+  const { data: spend, error: spendError } = await supabase.rpc('expense_by_category_for_range', {
+    target_workspace_id: workspaceId,
+    range_from: monthStart,
+    range_to: spendThrough,
+  })
   if (spendError) throw new Error(`Failed to load spend: ${spendError.message}`)
 
   const spendByCategory = new Map<string, Minor>()
@@ -76,10 +80,11 @@ export async function listBudgetsWithProgress(
     if (row.category_id) spendByCategory.set(row.category_id, toMinor(row.total))
   }
 
-  const { data: summary, error: summaryError } = await supabase.rpc(
-    'workspace_totals_for_range',
-    { target_workspace_id: workspaceId, range_from: monthStart, range_to: spendThrough },
-  )
+  const { data: summary, error: summaryError } = await supabase.rpc('workspace_totals_for_range', {
+    target_workspace_id: workspaceId,
+    range_from: monthStart,
+    range_to: spendThrough,
+  })
   if (summaryError) throw new Error(`Failed to load month total: ${summaryError.message}`)
 
   const totalMonthExpense = toMinor(
@@ -90,9 +95,7 @@ export async function listBudgetsWithProgress(
 
   return rows.map((row) => {
     const limit = toMinor(row.amount)
-    const spent = row.category_id
-      ? (spendByCategory.get(row.category_id) ?? 0)
-      : totalMonthExpense
+    const spent = row.category_id ? (spendByCategory.get(row.category_id) ?? 0) : totalMonthExpense
     const isOverall = row.category_id === null
 
     return {
@@ -105,10 +108,7 @@ export async function listBudgetsWithProgress(
   })
 }
 
-export async function createBudget(input: {
-  categoryId: string | null
-  amount: string
-}) {
+export async function createBudget(input: { categoryId: string | null; amount: string }) {
   const workspaceId = await requireWorkspaceId()
   const supabase = await createClient()
 
@@ -232,7 +232,9 @@ export async function postRecurringOccurrence(
 
   const { data: rule, error: loadError } = await supabase
     .from('recurring_transactions')
-    .select('id, type, amount, description, account_id, category_id, counterparty_account_id, anchor_date, last_posted_on, frequency, interval_count, ends_on')
+    .select(
+      'id, type, amount, description, account_id, category_id, counterparty_account_id, anchor_date, last_posted_on, frequency, interval_count, ends_on',
+    )
     .eq('id', recurringId)
     .eq('workspace_id', workspaceId)
     .maybeSingle()
@@ -241,6 +243,28 @@ export async function postRecurringOccurrence(
   if (!rule) throw new Error('Rule not found')
 
   const row = rule as unknown as RecurringRow
+
+  // The occurrence date must actually BE an occurrence of this rule.
+  //
+  // Without this, a client can post any real date: a transaction is created for
+  // a day the rule never predicted, and last_posted_on advances to that date,
+  // which permanently suppresses every genuine occurrence up to and including
+  // it. The idempotency guard below cannot catch this, because a large date
+  // always satisfies it.
+  if (occurrenceDate < row.anchor_date) {
+    throw new Error('That date is before the rule starts.')
+  }
+
+  const schedule = {
+    frequency: row.frequency as Frequency,
+    interval: row.interval_count,
+    anchorDate: row.anchor_date,
+    endsOn: row.ends_on,
+  }
+  const expected = nextOccurrence(schedule, occurrenceDate)
+  if (!expected || expected.date !== occurrenceDate) {
+    throw new Error('That date is not a scheduled occurrence of this rule.')
+  }
 
   // Idempotency check: refuse if this occurrence or an earlier one is posted.
   if (row.last_posted_on && occurrenceDate <= row.last_posted_on) {
@@ -251,8 +275,7 @@ export async function postRecurringOccurrence(
     workspace_id: workspaceId,
     account_id: row.account_id,
     category_id: row.type === 'transfer' ? null : row.category_id,
-    counterparty_account_id:
-      row.type === 'transfer' ? row.counterparty_account_id : null,
+    counterparty_account_id: row.type === 'transfer' ? row.counterparty_account_id : null,
     type: row.type,
     amount: row.amount,
     description: row.description,

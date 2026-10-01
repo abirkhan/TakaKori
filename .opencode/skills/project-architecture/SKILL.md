@@ -38,18 +38,18 @@ entire subtree through the client bundle and forfeits streaming.
 
 ## Where code goes
 
-| Code | Location |
-|---|---|
-| Page, layout, route handler | `src/app/` |
-| Reusable UI | `src/components/ui/` |
-| Domain UI | `src/components/<domain>/` |
-| Supabase clients | `src/lib/supabase/` |
-| Money | `src/lib/money.ts` |
-| Date ranges | `src/lib/dates.ts` |
-| Zod schemas | `src/lib/validations.ts` |
-| Auth guards | `src/lib/auth.ts` |
-| Data access | `src/lib/queries/` |
-| Server Actions | `src/actions/` |
+| Code                        | Location                   |
+| --------------------------- | -------------------------- |
+| Page, layout, route handler | `src/app/`                 |
+| Reusable UI                 | `src/components/ui/`       |
+| Domain UI                   | `src/components/<domain>/` |
+| Supabase clients            | `src/lib/supabase/`        |
+| Money                       | `src/lib/money.ts`         |
+| Date ranges                 | `src/lib/dates.ts`         |
+| Zod schemas                 | `src/lib/validations.ts`   |
+| Auth guards                 | `src/lib/auth.ts`          |
+| Data access                 | `src/lib/queries/`         |
+| Server Actions              | `src/actions/`             |
 
 Import with the `@/` alias.
 

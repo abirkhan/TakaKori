@@ -26,16 +26,11 @@ export default async function CategoriesPage() {
             <h2 className="mb-2 text-sm font-medium text-neutral-500">{group.title}</h2>
             <ul className="flex flex-wrap gap-2">
               {group.items.map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded border border-neutral-200 px-3 py-1.5 text-sm"
-                >
+                <li key={c.id} className="rounded border border-neutral-200 px-3 py-1.5 text-sm">
                   {c.name}
                 </li>
               ))}
-              {group.items.length === 0 && (
-                <li className="text-sm text-neutral-400">None yet</li>
-              )}
+              {group.items.length === 0 && <li className="text-sm text-neutral-400">None yet</li>}
             </ul>
           </section>
         ))}

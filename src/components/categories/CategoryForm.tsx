@@ -14,7 +14,10 @@ export function CategoryForm() {
       <h2 className="text-lg font-medium">Add category</h2>
 
       {state.error && (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {state.error}
         </p>
       )}

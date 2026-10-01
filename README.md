@@ -27,15 +27,15 @@ npx supabase gen types types/database.ts
 
 ## Scripts
 
-| Command | Purpose |
-|---|---|
-| `npm run dev` | development server |
-| `npm run build` | production build |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint (`next lint` was removed in Next 16) |
-| `npm run test` | Vitest unit tests |
-| `npm run test:e2e` | Playwright E2E |
-| `npm run verify` | typecheck → lint → test → build |
+| Command             | Purpose                                     |
+| ------------------- | ------------------------------------------- |
+| `npm run dev`       | development server                          |
+| `npm run build`     | production build                            |
+| `npm run typecheck` | `tsc --noEmit`                              |
+| `npm run lint`      | ESLint (`next lint` was removed in Next 16) |
+| `npm run test`      | Vitest unit tests                           |
+| `npm run test:e2e`  | Playwright E2E                              |
+| `npm run verify`    | typecheck → lint → test → build             |
 
 ## Documentation
 

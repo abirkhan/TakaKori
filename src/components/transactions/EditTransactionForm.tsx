@@ -16,10 +16,7 @@ import type { ExportableTransaction } from '@/lib/csv'
 export function EditTransactionForm({
   transaction,
 }: {
-  transaction: Pick<
-    ExportableTransaction,
-    'id' | 'type' | 'amount' | 'description' | 'occurred_on'
-  >
+  transaction: Pick<ExportableTransaction, 'id' | 'type' | 'amount' | 'description' | 'occurred_on'>
 }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     updateTransactionAction,

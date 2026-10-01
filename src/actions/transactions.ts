@@ -1,13 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createAccount, createCategory } from '@/lib/queries/reference'
-import {
-  createTransaction,
-  deleteTransaction,
-  updateTransaction,
-} from '@/lib/queries/transactions'
+import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/queries/transactions'
 import {
   accountKindSchema,
   categoryTypeSchema,
@@ -111,9 +108,27 @@ export async function updateTransactionAction(
   return { success: 'Transaction updated' }
 }
 
+/**
+ * Delete a transaction.
+ *
+ * Redirects back with a reason on failure rather than throwing, because a
+ * thrown Error from a form action becomes a 500 and an error page. That is a
+ * poor outcome for something as ordinary as deleting a row that was already
+ * gone.
+ */
 export async function deleteTransactionAction(formData: FormData): Promise<void> {
-  const id = uuidSchema.parse(formData.get('id'))
-  await deleteTransaction(id)
+  const parsed = uuidSchema.safeParse(formData.get('id'))
+  if (!parsed.success) {
+    redirect('/transactions?error=' + encodeURIComponent('Invalid transaction id.'))
+  }
+
+  try {
+    await deleteTransaction(parsed.data)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not delete the transaction.'
+    redirect('/transactions?error=' + encodeURIComponent(message))
+  }
+
   revalidatePath('/dashboard')
   revalidatePath('/transactions')
 }

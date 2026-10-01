@@ -2,11 +2,7 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { signOut } from '@/app/(auth)/actions'
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { email } = await requireUser()
 
   return (

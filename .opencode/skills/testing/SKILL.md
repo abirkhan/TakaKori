@@ -52,11 +52,10 @@ test('user B cannot read user A transactions', async () => {
   const { data } = await clientA.from('transactions').select()
   expect(data).toHaveLength(1)
 
-  const { data: leaked, error } = await clientB
-    .from('transactions').select().eq('id', data![0].id)
+  const { data: leaked, error } = await clientB.from('transactions').select().eq('id', data![0].id)
 
   expect(leaked).toEqual([])
-  expect(error).toBeNull()   // RLS filters silently; it does not error
+  expect(error).toBeNull() // RLS filters silently; it does not error
 })
 ```
 

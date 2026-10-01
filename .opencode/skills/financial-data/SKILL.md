@@ -14,9 +14,9 @@ product. A balance that is off by one poisha is a bug, not a rounding detail.
 
 ```ts
 // These are all wrong, and all produce plausible-looking nonsense.
-amount + 100            // "3500.00100"
-Number(amount) + 0.1    // 3500.1, but 0.1+0.2 !== 0.3
-amount.toFixed(2)       // fine as output, never as input
+amount + 100 // "3500.00100"
+Number(amount) + 0.1 // 3500.1, but 0.1+0.2 !== 0.3
+amount.toFixed(2) // fine as output, never as input
 ```
 
 ## Use `lib/money.ts`. It is the only place.
@@ -24,10 +24,10 @@ amount.toFixed(2)       // fine as output, never as input
 ```ts
 import { toMinor, parseAmount, formatMinor, toNumericString } from '@/lib/money'
 
-toMinor('3500.00')          // 350000   — from the database
-parseAmount('500.50')       // 50050    — from a form
-toNumericString(350000)     // "3500.00" — to the database
-formatMinor(350000)          // "৳ 3,50,000.00"
+toMinor('3500.00') // 350000   — from the database
+parseAmount('500.50') // 50050    — from a form
+toNumericString(350000) // "3500.00" — to the database
+formatMinor(350000) // "৳ 3,50,000.00"
 ```
 
 Never add a second money helper. Never do arithmetic on a raw amount.

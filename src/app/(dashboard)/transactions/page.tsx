@@ -21,13 +21,10 @@ function one(value: string | string[] | undefined): string | undefined {
   return value || undefined
 }
 
-export default async function TransactionsPage({
-  searchParams,
-}: {
-  searchParams: SearchParams
-}) {
+export default async function TransactionsPage({ searchParams }: { searchParams: SearchParams }) {
   const { userId } = await requireUser()
   const params = await searchParams
+  const actionError = typeof params.error === 'string' ? params.error : null
 
   const supabase = await createClient()
   const { data: profile } = await supabase
@@ -92,13 +89,24 @@ export default async function TransactionsPage({
         <TransactionForm accounts={accounts} categories={categories} today={todayIn(timezone)} />
       </section>
 
+      {actionError && (
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {actionError}
+        </p>
+      )}
+
       <Suspense fallback={<div className="text-sm text-neutral-400">Loading filters…</div>}>
         <TransactionFilters accounts={accounts} categories={categories} />
       </Suspense>
 
       <section>
         <h2 className="mb-3 text-lg font-medium">
-          {range ? `Showing ${visible.length} (${range.from} to ${range.to})` : `All time (${visible.length})`}
+          {range
+            ? `Showing ${visible.length} (${range.from} to ${range.to})`
+            : `All time (${visible.length})`}
         </h2>
 
         {visible.length === 0 ? (

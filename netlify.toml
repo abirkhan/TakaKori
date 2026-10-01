@@ -1,0 +1,26 @@
+# Netlify deployment
+#
+# @netlify/plugin-nextjs is installed as a dev dependency and detected
+# automatically. No build command override is needed: the plugin sets it.
+#
+# Required environment variables (set in the Netlify UI, not in this file):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+#   NEXT_PUBLIC_SITE_URL          must match the Supabase redirect allowlist
+#
+# NOTE: there is no service-role key here, and there should never be one. The
+# application needs no privileged access; every query runs as the signed-in user
+# under RLS.
+
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "24"
+
+# Deploy previews get their own Supabase redirect entry automatically if the
+# branch name is included in the allowed redirect patterns in the Supabase
+# dashboard. Without that, email confirmation on previews fails silently.
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

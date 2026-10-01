@@ -5,10 +5,7 @@ import { createBudgetAction, type ActionState } from '@/actions/planning'
 import type { Category } from '@/lib/queries/reference'
 
 export function BudgetForm({ categories }: { categories: Category[] }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    createBudgetAction,
-    {},
-  )
+  const [state, formAction, pending] = useActionState<ActionState, FormData>(createBudgetAction, {})
 
   const expenseCategories = categories.filter((c) => c.type === 'expense')
 
@@ -17,7 +14,10 @@ export function BudgetForm({ categories }: { categories: Category[] }) {
       <h2 className="text-lg font-medium">Set a budget</h2>
 
       {state.error && (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {state.error}
         </p>
       )}

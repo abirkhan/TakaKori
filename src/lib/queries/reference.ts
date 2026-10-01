@@ -118,7 +118,7 @@ export interface WorkspaceTotals {
 export async function getTotalsForRange(range: {
   from: string
   to: string
-}): Promise<WorkspaceTotals & { transaction_count: number } | null> {
+}): Promise<(WorkspaceTotals & { transaction_count: number }) | null> {
   const workspaceId = await requireWorkspaceId()
   const supabase = await createClient()
 
@@ -130,8 +130,7 @@ export async function getTotalsForRange(range: {
 
   if (error) throw new Error(`Failed to load range totals: ${error.message}`)
   const row = (Array.isArray(data) ? data[0] : data) as
-    | (WorkspaceTotals & { transaction_count: number })
-    | null
+    (WorkspaceTotals & { transaction_count: number }) | null
   return row ?? null
 }
 

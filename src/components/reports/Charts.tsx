@@ -70,10 +70,18 @@ export function MonthlyTrend({
         <caption className="sr-only">Income and expense per month</caption>
         <thead>
           <tr className="border-b border-neutral-200 text-left text-neutral-500">
-            <th scope="col" className="py-1 font-normal">Month</th>
-            <th scope="col" className="py-1 text-right font-normal">Income</th>
-            <th scope="col" className="py-1 text-right font-normal">Expense</th>
-            <th scope="col" className="py-1 text-right font-normal">Saved</th>
+            <th scope="col" className="py-1 font-normal">
+              Month
+            </th>
+            <th scope="col" className="py-1 text-right font-normal">
+              Income
+            </th>
+            <th scope="col" className="py-1 text-right font-normal">
+              Expense
+            </th>
+            <th scope="col" className="py-1 text-right font-normal">
+              Saved
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -82,9 +90,7 @@ export function MonthlyTrend({
               <td className="py-1">{p.label}</td>
               <td className="py-1 text-right tabular-nums">{formatMoney(p.income)}</td>
               <td className="py-1 text-right tabular-nums">{formatMoney(p.expense)}</td>
-              <td className="py-1 text-right tabular-nums">
-                {formatMoney(p.income - p.expense)}
-              </td>
+              <td className="py-1 text-right tabular-nums">{formatMoney(p.income - p.expense)}</td>
             </tr>
           ))}
         </tbody>
@@ -118,11 +124,9 @@ export function CategoryBars({
           <li key={r.name} className="flex flex-col gap-1">
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <span>{r.name}</span>
-              <span className="tabular-nums text-neutral-600">
+              <span className="text-neutral-600 tabular-nums">
                 {formatMoney(r.total)}
-                <span className="ml-2 text-xs text-neutral-400">
-                  {share.toFixed(0)}%
-                </span>
+                <span className="ml-2 text-xs text-neutral-400">{share.toFixed(0)}%</span>
               </span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">

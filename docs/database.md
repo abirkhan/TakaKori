@@ -113,11 +113,11 @@ aggregation lives in SQL.
 Defined in migration `0004_views.sql`, all with `security_invoker = true` so
 RLS applies to the caller rather than the view owner.
 
-| View | Purpose |
-|---|---|
-| `workspace_totals` | income, expense, net, transferred per workspace |
-| `account_balances` | balance per account, transfers applied both directions |
-| `expense_by_category` | spend grouped by category |
+| View                  | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `workspace_totals`    | income, expense, net, transferred per workspace        |
+| `account_balances`    | balance per account, transfers applied both directions |
+| `expense_by_category` | spend grouped by category                              |
 
 `workspace_totals` excludes transfers from income and expense by construction.
 `account_balances` treats a transfer as −amount on the source and +amount on
@@ -127,12 +127,12 @@ the destination, so a workspace total correctly nets transfers to zero.
 
 Every index exists to serve a specific access path.
 
-| Index | Serves |
-|---|---|
+| Index                                 | Serves                                          |
+| ------------------------------------- | ----------------------------------------------- |
 | `transactions_workspace_occurred_idx` | the primary read: a workspace over a date range |
-| `transactions_account_id_idx` | per-account balance and history |
-| `workspace_members_user_id_idx` | the membership lookup in **every** RLS policy |
-| `categories_workspace_type_name_key` | category-name uniqueness |
+| `transactions_account_id_idx`         | per-account balance and history                 |
+| `workspace_members_user_id_idx`       | the membership lookup in **every** RLS policy   |
+| `categories_workspace_type_name_key`  | category-name uniqueness                        |
 
 Adding an RLS predicate on a column means adding an index on that column.
 

@@ -60,14 +60,14 @@ export default async function DashboardPage() {
 
         <div className="rounded border border-neutral-200 p-4">
           <p className="text-sm text-neutral-500">This month — income</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-700">
+          <p className="mt-1 text-2xl font-semibold text-emerald-700 tabular-nums">
             {formatMinor(monthIncome, { currency })}
           </p>
         </div>
 
         <div className="rounded border border-neutral-200 p-4">
           <p className="text-sm text-neutral-500">This month — expense</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-red-700">
+          <p className="mt-1 text-2xl font-semibold text-red-700 tabular-nums">
             {formatMinor(monthExpense, { currency })}
           </p>
         </div>

@@ -2,12 +2,7 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinor, toMinor } from '@/lib/money'
-import {
-  resolveRange,
-  startOfMonthOffset,
-  todayIn,
-  type DateRangePreset,
-} from '@/lib/dates'
+import { resolveRange, startOfMonthOffset, todayIn, type DateRangePreset } from '@/lib/dates'
 import {
   getExpenseByCategory,
   getIncomeByCategory,
@@ -130,7 +125,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
             {[
               { label: 'Income', value: income, tone: 'text-emerald-700' },
               { label: 'Expense', value: expense, tone: 'text-red-700' },
-              { label: 'Saved', value: saved, tone: saved >= 0 ? 'text-emerald-700' : 'text-red-700' },
+              {
+                label: 'Saved',
+                value: saved,
+                tone: saved >= 0 ? 'text-emerald-700' : 'text-red-700',
+              },
               {
                 label: 'Savings rate',
                 value: null,
@@ -193,8 +192,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
 
           {transferred > 0 && (
             <p className="text-sm text-neutral-500">
-              {money(transferred)} moved between accounts in this period. Transfers are
-              not counted as income or spending.
+              {money(transferred)} moved between accounts in this period. Transfers are not counted
+              as income or spending.
             </p>
           )}
         </>
@@ -204,8 +203,18 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
 }
 
 const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
 ]
 
 function shortLabel(ym: string): string {

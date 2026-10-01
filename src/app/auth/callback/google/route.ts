@@ -13,9 +13,7 @@ export async function GET(request: NextRequest) {
   const nextParam = request.nextUrl.searchParams.get('next')
 
   const safeNext =
-    nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
-      ? nextParam
-      : '/dashboard'
+    nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/dashboard'
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=oauth_missing_code', request.url))

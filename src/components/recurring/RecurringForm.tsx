@@ -40,7 +40,10 @@ export function RecurringForm({
       <h2 className="text-lg font-medium">Add a recurring rule</h2>
 
       {state.error && (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {state.error}
         </p>
       )}
@@ -51,9 +54,7 @@ export function RecurringForm({
           <label
             key={value}
             className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
-              type === value
-                ? 'border-neutral-900 bg-neutral-900 text-white'
-                : 'border-neutral-300'
+              type === value ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-300'
             }`}
           >
             <input
@@ -96,7 +97,11 @@ export function RecurringForm({
 
         <label className="flex flex-col gap-1 text-sm">
           <span>Category</span>
-          <select name="categoryId" required className="rounded border border-neutral-300 px-3 py-2">
+          <select
+            name="categoryId"
+            required
+            className="rounded border border-neutral-300 px-3 py-2"
+          >
             <option value="">Select</option>
             {visibleCategories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -153,13 +158,17 @@ export function RecurringForm({
 
         <label className="flex flex-col gap-1 text-sm">
           <span>Ends on (optional)</span>
-          <input type="date" name="endsOn" className="rounded border border-neutral-300 px-3 py-2" />
+          <input
+            type="date"
+            name="endsOn"
+            className="rounded border border-neutral-300 px-3 py-2"
+          />
         </label>
       </div>
 
       <p className="text-xs text-neutral-500">
-        A monthly rule anchored on the 31st falls on the last day of shorter months,
-        so a 31st payment lands on 28 or 29 February rather than disappearing.
+        A monthly rule anchored on the 31st falls on the last day of shorter months, so a 31st
+        payment lands on 28 or 29 February rather than disappearing.
       </p>
 
       <button

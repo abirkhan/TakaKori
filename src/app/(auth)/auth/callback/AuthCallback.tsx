@@ -46,9 +46,7 @@ export function AuthCallback() {
 
       // No token in the fragment: the link may have been opened in a browser
       // that stripped it, or it has expired.
-      setError(
-        'This link is no longer valid. It may have expired or already been used.',
-      )
+      setError('This link is no longer valid. It may have expired or already been used.')
     }
 
     void handle()
@@ -61,7 +59,10 @@ export function AuthCallback() {
     return (
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-medium">Link expired</h2>
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
         <a href="/login" className="text-sm underline">

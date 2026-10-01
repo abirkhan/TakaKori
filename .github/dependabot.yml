@@ -1,0 +1,8 @@
+{
+  'recommendations': ['github/reviewdog', 'RenovateBot'],
+  'labeler': true,
+  'lockFileMaintenance': { 'enabled': true },
+  'schedule': ['before 6am on monday'],
+  'extends': ['config:base'],
+  'ignoreDeps': [],
+}

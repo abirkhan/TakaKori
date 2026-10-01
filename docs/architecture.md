@@ -2,16 +2,16 @@
 
 ## Stack
 
-| Layer | Choice | Version |
-|---|---|---|
-| Framework | Next.js (App Router, Turbopack) | 16.3.8 |
-| UI | React Server Components by default | 19.2.8 |
-| Language | TypeScript strict | ~5.9.3 |
-| Styling | Tailwind CSS (CSS-first config) | 4.3.3 |
-| Database | Supabase Postgres + Auth + RLS | — |
-| Validation | Zod | 4.6.5 |
-| Testing | Vitest + Playwright | 5.0.3 / 1.63.0 |
-| Deploy | Netlify (`@netlify/plugin-nextjs`) | 5.16.0 |
+| Layer      | Choice                             | Version        |
+| ---------- | ---------------------------------- | -------------- |
+| Framework  | Next.js (App Router, Turbopack)    | 16.3.8         |
+| UI         | React Server Components by default | 19.2.8         |
+| Language   | TypeScript strict                  | ~5.9.3         |
+| Styling    | Tailwind CSS (CSS-first config)    | 4.3.3          |
+| Database   | Supabase Postgres + Auth + RLS     | —              |
+| Validation | Zod                                | 4.6.5          |
+| Testing    | Vitest + Playwright                | 5.0.3 / 1.63.0 |
+| Deploy     | Netlify (`@netlify/plugin-nextjs`) | 5.16.0         |
 
 TypeScript is pinned below 7. npm's `latest` is now the Go-based 7.0 release;
 the ESLint and Next.js integrations in this stack have not been validated
@@ -101,11 +101,11 @@ transaction. Revalidate explicitly with `revalidatePath()` after a mutation.
 
 ## Environment variables
 
-| Variable | Scope | Notes |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | public | project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public | `sb_publishable_…`, browser-safe |
-| `SUPABASE_SERVICE_ROLE_KEY` | server only | not currently used; never `NEXT_PUBLIC_` |
+| Variable                               | Scope       | Notes                                    |
+| -------------------------------------- | ----------- | ---------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | public      | project URL                              |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public      | `sb_publishable_…`, browser-safe         |
+| `SUPABASE_SERVICE_ROLE_KEY`            | server only | not currently used; never `NEXT_PUBLIC_` |
 
 The service-role key bypasses RLS. Nothing in this repository needs it. If a
 future task introduces one, that task must include a review of every call site.

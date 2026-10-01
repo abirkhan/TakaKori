@@ -1,10 +1,10 @@
 import { deleteRecurringAction, postOccurrenceAction } from '@/actions/planning'
 import type { RecurringView } from '@/lib/queries/planning'
+import { toMinor } from '@/lib/money'
 
 function describeFrequency(r: RecurringView): string {
   const n = r.interval_count
-  const unit =
-    r.frequency === 'weekly' ? 'week' : r.frequency === 'monthly' ? 'month' : 'year'
+  const unit = r.frequency === 'weekly' ? 'week' : r.frequency === 'monthly' ? 'month' : 'year'
   return n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`
 }
 
@@ -34,7 +34,7 @@ export function RecurringCard({
           }`}
         >
           {rule.type === 'income' ? '+' : '−'}
-          {formatMoney(Number(rule.amount) * 100)}
+          {formatMoney(toMinor(rule.amount))}
         </p>
       </div>
 
@@ -44,7 +44,7 @@ export function RecurringCard({
           <ul className="mt-2 flex flex-col gap-2">
             {rule.due.map((occ) => (
               <li key={occ.date} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm tabular-nums text-amber-900">
+                <span className="text-sm text-amber-900 tabular-nums">
                   {occ.date}
                   {occ.clamped && (
                     <span className="ml-2 text-xs text-amber-700">
@@ -74,12 +74,10 @@ export function RecurringCard({
 
       {rule.upcoming.length > 0 && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-xs text-neutral-500 underline">
-            Upcoming
-          </summary>
+          <summary className="cursor-pointer text-xs text-neutral-500 underline">Upcoming</summary>
           <ul className="mt-2 flex flex-col gap-1">
             {rule.upcoming.map((occ) => (
-              <li key={occ.date} className="text-xs tabular-nums text-neutral-500">
+              <li key={occ.date} className="text-xs text-neutral-500 tabular-nums">
                 {occ.date}
                 {occ.clamped && (
                   <span className="ml-2 text-neutral-400">(last day of a short month)</span>

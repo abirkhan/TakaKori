@@ -76,11 +76,11 @@ Every mutation filters on the primary key. This is not optional.
 
 ## Client boundaries
 
-| File | Runs in | May write cookies |
-|---|---|---|
-| `lib/supabase/client.ts` | browser | yes |
+| File                     | Runs in                            | May write cookies      |
+| ------------------------ | ---------------------------------- | ---------------------- |
+| `lib/supabase/client.ts` | browser                            | yes                    |
 | `lib/supabase/server.ts` | server components, actions, routes | only in actions/routes |
-| `lib/supabase/proxy.ts` | `src/proxy.ts` | yes |
+| `lib/supabase/proxy.ts`  | `src/proxy.ts`                     | yes                    |
 
 Server Components cannot write cookies. `server.ts` swallows the resulting
 error by design, because `proxy.ts` has already refreshed the session. Do not

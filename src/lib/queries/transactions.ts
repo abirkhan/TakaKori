@@ -69,10 +69,7 @@ export async function listTransactions(filters: TransactionFilters = {}) {
   if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
   if (filters.accountId) query = query.eq('account_id', filters.accountId)
 
-  query = query.range(
-    filters.offset ?? 0,
-    (filters.offset ?? 0) + (filters.limit ?? 50) - 1,
-  )
+  query = query.range(filters.offset ?? 0, (filters.offset ?? 0) + (filters.limit ?? 50) - 1)
 
   const { data, error } = await query
   if (error) throw new Error(`Failed to list transactions: ${error.message}`)

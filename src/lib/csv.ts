@@ -61,15 +61,7 @@ export interface ExportableTransaction {
  * converted through lib/money.ts — never formatted here by hand.
  */
 export function transactionsToCsv(transactions: ExportableTransaction[]): string {
-  const headers = [
-    'Date',
-    'Type',
-    'Amount',
-    'Category',
-    'Account',
-    'To account',
-    'Description',
-  ]
+  const headers = ['Date', 'Type', 'Amount', 'Category', 'Account', 'To account', 'Description']
 
   const rows = transactions.map((t) => {
     const amount = toNumericString(toMinor(t.amount))

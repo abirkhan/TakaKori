@@ -15,14 +15,7 @@
  * half-open range for querying.
  */
 
-export type DateRangePreset =
-  | 'today'
-  | 'week'
-  | 'month'
-  | 'quarter'
-  | 'year'
-  | 'all'
-  | 'custom'
+export type DateRangePreset = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all' | 'custom'
 
 export interface DateRange {
   /** Inclusive start, as YYYY-MM-DD. */

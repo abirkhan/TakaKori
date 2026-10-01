@@ -132,9 +132,7 @@ describe('createTransactionSchema — transfers', () => {
     })
     expect(result.success).toBe(false)
     if (!result.success) {
-      expect(
-        result.error.issues.some((i) => i.message.includes('different accounts')),
-      ).toBe(true)
+      expect(result.error.issues.some((i) => i.message.includes('different accounts'))).toBe(true)
     }
   })
 

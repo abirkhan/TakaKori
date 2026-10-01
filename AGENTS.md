@@ -15,13 +15,13 @@ Bangladesh first and a wider audience later.
 
 ## Read before changing anything
 
-| Document | Covers |
-|---|---|
+| Document               | Covers                                    |
+| ---------------------- | ----------------------------------------- |
 | `docs/architecture.md` | stack, rendering model, module boundaries |
-| `docs/database.md` | schema, tenancy, migrations |
-| `docs/security.md` | RLS, authorization, money handling |
-| `docs/decisions.md` | why each architectural choice was made |
-| `docs/roadmap.md` | phases and current status |
+| `docs/database.md`     | schema, tenancy, migrations               |
+| `docs/security.md`     | RLS, authorization, money handling        |
+| `docs/decisions.md`    | why each architectural choice was made    |
+| `docs/roadmap.md`      | phases and current status                 |
 
 Skills in `.opencode/skills/` carry the operational rules. Load the relevant one
 rather than re-deriving it: `project-architecture`, `supabase-development`,
@@ -44,8 +44,7 @@ These are not preferences. Violating them produces silent, hard-to-debug bugs.
 6. **`workspace_id` is the only tenancy key.** Business tables never carry
    `user_id`. Ownership derives through `workspace_members`.
 7. **Date ranges are computed in the user's timezone**, never UTC.
-8. **Transfers are not income or expense.** `type` is `income | expense |
-   transfer`, and a transfer must have a `counterparty_account_id`.
+8. **Transfers are not income or expense.** `type` is one of `income`, `expense` or `transfer`, and a transfer must have a `counterparty_account_id`.
 9. **Migrations only.** Never change the schema through the Supabase dashboard.
 10. **Never commit or expose the service-role key.** Nothing here needs it.
 

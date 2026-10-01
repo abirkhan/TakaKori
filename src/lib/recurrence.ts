@@ -132,11 +132,7 @@ export function nextOccurrence(rule: RecurrenceRule, from: string): Occurrence |
 /**
  * The next `count` occurrences on or after `from`, oldest first.
  */
-export function upcomingOccurrences(
-  rule: RecurrenceRule,
-  from: string,
-  count = 6,
-): Occurrence[] {
+export function upcomingOccurrences(rule: RecurrenceRule, from: string, count = 6): Occurrence[] {
   const out: Occurrence[] = []
   let cursor = from
 
@@ -173,4 +169,4 @@ function addDays(ymd: string, delta: number): string {
   return toYmd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate())
 }
 
-export { addDays };
+export { addDays }

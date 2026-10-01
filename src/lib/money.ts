@@ -45,7 +45,10 @@ export function scaleFor(currency: string): number {
  */
 export function toMinor(value: string | number | null | undefined): Minor {
   if (value === null || value === undefined || value === '') return 0
-  return new Decimal(value).mul(10 ** scaleFor('BDT')).toDecimalPlaces(0).toNumber()
+  return new Decimal(value)
+    .mul(10 ** scaleFor('BDT'))
+    .toDecimalPlaces(0)
+    .toNumber()
 }
 
 /**
