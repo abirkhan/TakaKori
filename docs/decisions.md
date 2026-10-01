@@ -442,6 +442,36 @@ its pending state. A hand-rolled flag is a latch waiting to happen.
 
 ---
 
+## ADR-023 - One definition of "signed in", or the login page deadlocks
+
+**Status:** Accepted
+
+**Decision:** The proxy may redirect `/login` → `/dashboard` only after
+`getUser()` confirms the session over the network. `getClaims()` alone is never
+enough to move a user away from the login page.
+
+**Reason:** Two layers decide whether a user is signed in, and they used
+different tools. `src/lib/supabase/proxy.ts` used `getClaims()`, which verifies
+the JWT signature locally against the JWKS. `src/lib/auth.ts` used `getUser()`,
+which asks the auth server. A token the auth server rejects — revoked session,
+dead refresh token — still passes a local signature check. When the two
+disagreed, the production site entered an endless redirect loop: `/login`
+redirected to `/dashboard` on the strength of the local check, the dashboard's
+own guard failed on the network check, and it redirected straight back. The user
+was locked out with no way to sign in and no error to read.
+
+Redirecting away from `/login` is the one place the cheap check is not safe,
+because it is the only redirect that can be undone by the other layer. Everywhere
+else, failing open towards `/login` is harmless.
+
+**Consequence:** "Cheap local check for speed" is not safe for any decision whose
+failure sends the user somewhere another layer will bounce back from. A
+regression test asserts that a stale cookie resolves to a login form, though the
+revoked-session case itself needs a genuinely revoked token to reproduce and was
+not reproducible locally.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted

@@ -203,6 +203,13 @@ missed:
   first: Cash and Bank moved ৳2,500 while total, income, and expense all stayed
   put.
 
+A third was found only by using the live site, not by any test: **`/login` and
+`/dashboard` could lock each other in an infinite redirect loop** on production.
+The proxy decided "signed in" with a local JWT signature check while the page
+guard asked the auth server, and when they disagreed the two redirect rules
+fought. Fixed in ADR-023. The exact trigger was not reproducible locally, so the
+fix removes the class of bug rather than one observed instance.
+
 Cleanup runs through the app's own delete button, not a test-only route or a
 service-role script — see the reasoning in the `testing` skill. The suite leaves
 the account exactly as it found it: verified at 10 rows and zero leftovers after

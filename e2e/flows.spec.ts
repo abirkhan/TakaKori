@@ -42,6 +42,35 @@ test('unauthenticated visitors are redirected away from the dashboard', async ({
   await expect(page).toHaveURL(/\/login/)
 })
 
+test('a stale session cookie locks nobody out of the login page', async ({ page }) => {
+  // A cookie that no longer corresponds to a usable session must still leave a
+  // usable login form. The dangerous case is the two session checks in
+  // src/lib/supabase/proxy.ts (local signature) and src/lib/auth.ts (network
+  // verified) disagreeing: /login bounces to /dashboard, the page guard fails,
+  // and it bounces back in an endless loop with no way to sign in.
+  //
+  // This covers the half that can be reproduced without a genuinely revoked
+  // token: a cookie the auth server will never accept must resolve to the login
+  // form rather than to a redirect cycle.
+  await page.context().addCookies([
+    {
+      name: `sb-${projectRef()}-auth-token`,
+      value:
+        'base64-0.eyJleHBpcmVzX2F0IjoxNzAwMDAwMDAwLCJ1c2VyIjp7ImlkIjoibm90LWEtcmVhbC11c2VyIn19',
+      domain: 'localhost',
+      path: '/',
+    },
+  ])
+
+  const response = await page.goto('/login')
+  expect(response?.status()).toBe(200)
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
+
+  // And the protected route must settle on /login rather than cycling.
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/login/)
+})
+
 authedTest('the dashboard renders a balance', async ({ signedIn }) => {
   await signedIn.goto('/dashboard')
   await expect(signedIn.getByRole('heading', { level: 1 })).toBeVisible()
@@ -185,6 +214,14 @@ async function readAccountBalance(page: Page, name: string): Promise<string> {
   await page.goto('/dashboard')
   const row = page.locator('li').filter({ hasText: name }).first()
   return await row.locator('span').last().innerText()
+}
+
+/** The Supabase project ref, which is the middle of the session cookie name. */
+function projectRef(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const ref = url?.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1]
+  if (!ref) throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set; is .env.test present?')
+  return ref
 }
 
 /**

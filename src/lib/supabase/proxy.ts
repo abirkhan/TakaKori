@@ -47,12 +47,26 @@ export async function updateSession(request: NextRequest) {
   // object — for that, use getUser(). A presence check is all this file needs,
   // and getClaims() avoids a network round-trip on every request.
   const { data } = await supabase.auth.getClaims()
-  const isSignedIn = Boolean(data?.claims?.sub)
+  let isSignedIn = Boolean(data?.claims?.sub)
 
   if (!isSignedIn && request.nextUrl.pathname.startsWith('/dashboard')) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  if (isSignedIn && request.nextUrl.pathname === '/login') {
+    // Only bounce the user away from /login once the auth server agrees.
+    //
+    // getClaims() is a local signature check, so a token the auth server would
+    // reject — revoked session, dead refresh token — still looks valid here.
+    // The page guard in lib/auth.ts uses getUser(), which does hit the network.
+    // When the two disagree, /login redirects to /dashboard, the dashboard's
+    // own guard fails, and it redirects back: an infinite loop that locks the
+    // user out of the site with no way forward. Confirming over the network
+    // before redirecting makes both layers agree on one definition of signed in.
+    const { data: verified } = await supabase.auth.getUser()
+    isSignedIn = Boolean(verified.user)
   }
 
   if (isSignedIn && request.nextUrl.pathname === '/login') {
