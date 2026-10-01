@@ -4,13 +4,16 @@
 # automatically.
 #
 # There is deliberately no `command` override. The plugin sets the build command
-# itself, and overriding it makes the build fail with a bare "exit code 2" after
-# the command has already succeeded — verified by giving each step its own exit
-# code and watching none of them fire. The gate therefore lives in the npm
-# `prebuild` hook (typecheck → lint → test) instead, so Netlify runs exactly the
-# build it expects and a type error, lint error, or failing test still stops the
-# deploy. No GitHub Actions workflow and no `workflow` OAuth scope needed.
-# See docs/decisions.md ADR-024.
+# itself, and the gate lives in the npm `postbuild` hook (typecheck → lint →
+# test) so Netlify runs exactly the build it expects while a type error, lint
+# error, or failing test still stops the deploy. No GitHub Actions workflow and
+# no `workflow` OAuth scope needed. See docs/decisions.md ADR-024.
+#
+# The gate must run AFTER the build, not before: next build generates
+# .next/types, which is where Next 16 declares LayoutProps and PageProps for
+# route modules. Running tsc first fails on any clean checkout with
+# "Cannot find name 'LayoutProps'". It only appeared to pass locally because a
+# dev server had left a populated .next behind.
 #
 # Required environment variables (set in the Netlify UI, not in this file):
 #   NEXT_PUBLIC_SUPABASE_URL

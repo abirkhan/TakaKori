@@ -51,11 +51,25 @@ These are not preferences. Violating them produces silent, hard-to-debug bugs.
 ## Definition of done
 
 ```bash
-npm run verify   # typecheck → lint → test → build
+npm run verify   # next build → typecheck → lint → test
 ```
 
 All four must pass. Then review `git diff` and report in the format given in the
 `task-execution` skill, including an honest "known gaps" section.
+
+The gate runs **after** the build, not before. Next 16 generates `LayoutProps`
+and `PageProps` into `.next/types` during the build, so typechecking first fails
+on any clean checkout with `Cannot find name 'LayoutProps'`. A stale `.next` from
+a dev server hides this, which means `verify` can pass locally on a tree that
+cannot deploy. If a change touches build config, scripts, or anything Netlify
+runs, check it in a clean clone:
+
+```bash
+git clone --branch main . /tmp/check && cd /tmp/check && npm ci && npm run verify
+```
+
+That is exactly what every Netlify deploy does now, which is why the gate lives
+in `postbuild` rather than a GitHub Actions workflow (ADR-024).
 
 "The implementation should work" is not a passing result. This project is built
 by an agent that has to prove its work rather than assert it.

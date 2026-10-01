@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "npm run typecheck && npm run lint && npm run test",
     "build": "next build",
+    "postbuild": "npm run typecheck && npm run lint && npm run test",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

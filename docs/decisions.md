@@ -476,9 +476,9 @@ not reproducible locally.
 
 **Status:** Accepted
 
-**Decision:** The gate lives in the npm `prebuild` hook (typecheck → lint → test),
-which runs ahead of every `next build` including Netlify's. `netlify.toml` sets
-**no** `command`. No GitHub Actions workflow is used.
+**Decision:** The gate lives in the npm `postbuild` hook (typecheck → lint →
+test), which runs after every `next build` including Netlify's. `netlify.toml`
+sets **no** `command`. No GitHub Actions workflow is used.
 
 **Reason, first half:** Netlify already builds on every push to `main` and
 already blocks the deploy when the build fails, so the guarantee a CI workflow
@@ -488,18 +488,29 @@ device-login, which is exactly the kind of manual step that quietly never
 happens. A gate that depends on someone completing a browser dance is a gate that
 silently does not run.
 
-**Reason, second half — the part that cost two failed deploys:** the obvious
-implementation, `command = "npm run verify"`, does not work. Overriding the build
-command makes the build fail with a bare `exit code 2` _after_ the command has
-already succeeded. The way that was established: give each step its own exit
-code (`npm run lint || exit 12; …`) and observe that none of 11, 12, 13, or 14
-is ever reported. Every step passes; the failure comes from afterwards, from
-`@netlify/plugin-nextjs`, which sets the build command itself and does not
-cope with an override.
+**Reason, second half — where this went wrong twice.** The gate has to run
+_after_ the build, and both earlier placements were wrong.
 
-`prebuild` is the fix because it changes nothing Netlify controls. The plugin
-still runs the build it expects, and the gate still runs first because npm runs
-`prebuild` before `build` unconditionally.
+`command = "npm run verify"` overrode the build command. `verify` ran typecheck
+first, and on a clean checkout that fails with `Cannot find name 'LayoutProps'` —
+a type Next 16 generates into `.next/types` during the build. The deploy died at
+`tsc` with exit 2, before Next ever ran. The obvious reading, that
+`@netlify/plugin-nextjs` objected to the override, was wrong: the plugin was
+innocent and the ordering was the bug.
+
+Moving the gate to `prebuild` preserved the same ordering bug and failed
+identically. What hid this for months of local work was a stale `.next` left by a
+dev server: `LayoutProps` resolved, `tsc` passed, and the project's own
+definition of done reported green on a tree that could not build from a clean
+checkout. Two failed deploys and a clean clone were needed to see it.
+
+`postbuild` is correct because `next build` generates the types and then
+type-checks against them, so by the time the gate runs the types exist. The
+plugin is also left to set the build command it expects.
+
+**Consequence:** Check the tree the way a deploy does. `npm run verify` in a
+directory with a populated `.next` proves nothing; a clean clone is the only
+honest test, and that is now what every deploy does.
 
 **Consequence:** No check on a pull request, only on push; branch previews are
 still built and gated, since Netlify builds those too. Running `next build`
