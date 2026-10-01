@@ -261,3 +261,40 @@ The fragment flow works with the default template and no dashboard changes.
 **Consequence:** `src/app/auth/confirm/route.ts` implements the token_hash flow
 and can be enabled later by changing one email template and one redirect URL.
 Do not delete it.
+
+---
+
+## ADR-015 - COALESCE each side of a subtraction, never the whole expression
+
+**Status:** Accepted
+
+**Decision:** `net_balance` is computed as
+
+    coalesce(sum(amount) filter (where type = 'income'), 0)
+  - coalesce(sum(amount) filter (where type = 'expense'), 0)
+
+never as `coalesce(sum(income) - sum(expense), 0)`.
+
+**Reason:** A filtered `SUM` with no matching rows returns NULL, and in SQL NULL
+propagates through arithmetic. `coalesce(NULL - 4500, 0)` is therefore `0`, not
+`-4500`. The outer coalesce only rescues the *result*, so it fires precisely when
+one side is missing and silently reports zero savings.
+
+Observed in the running app with a single 3,500.50 expense and no income:
+
+| case | buggy | correct |
+|---|---|---|
+| expense only | 0.00 | -3,500.50 |
+| income only | 0.00 | **80,000.00** |
+| both | 75,500.00 | 75,500.00 |
+
+The income-only case is the damaging one: a user with income but no expenses in
+the period would see zero savings instead of their full income. The bug is
+invisible whenever a period contains both sides, which is why it survived the
+seeded-data check in ADR-012 - that fixture had both.
+
+**Consequence:** Any aggregate that combines two independently-nullable inputs
+must coalesce each input, not the combined expression. This is also why
+JavaScript is a poor model for reasoning about SQL NULL: `null - 3500.5` is
+`-3500.5` in JS but NULL in SQL. When checking SQL null behaviour, model the
+NULL propagation explicitly rather than translating the expression to JS.
