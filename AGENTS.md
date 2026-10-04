@@ -15,17 +15,19 @@ Bangladesh first and a wider audience later.
 
 ## Read before changing anything
 
-| Document               | Covers                                    |
-| ---------------------- | ----------------------------------------- |
-| `docs/architecture.md` | stack, rendering model, module boundaries |
-| `docs/database.md`     | schema, tenancy, migrations               |
-| `docs/security.md`     | RLS, authorization, money handling        |
-| `docs/decisions.md`    | why each architectural choice was made    |
-| `docs/roadmap.md`      | phases and current status                 |
+| Document                | Covers                                    |
+| ----------------------- | ----------------------------------------- |
+| `docs/architecture.md`  | stack, rendering model, module boundaries |
+| `docs/database.md`      | schema, tenancy, migrations               |
+| `docs/security.md`      | RLS, authorization, money handling        |
+| `docs/decisions.md`     | why each architectural choice was made    |
+| `docs/roadmap.md`       | phases and current status                 |
+| `docs/design-system.md` | brand, colour, type, shape, layout, voice |
 
 Skills in `.opencode/skills/` carry the operational rules. Load the relevant one
 rather than re-deriving it: `project-architecture`, `supabase-development`,
-`financial-data`, `security-review`, `testing`, `task-execution`.
+`financial-data`, `security-review`, `testing`, `task-execution`,
+`brand-design`.
 
 ## Hard rules
 
@@ -47,6 +49,9 @@ These are not preferences. Violating them produces silent, hard-to-debug bugs.
 8. **Transfers are not income or expense.** `type` is one of `income`, `expense` or `transfer`, and a transfer must have a `counterparty_account_id`.
 9. **Migrations only.** Never change the schema through the Supabase dashboard.
 10. **Never commit or expose the service-role key.** Nothing here needs it.
+11. **UI follows `docs/design-system.md`.** No raw palette classes (`text-emerald-700`),
+    no `dark:` variants, no new fonts, no icon or charting library, and money is
+    always tabular via `.tk-money` / `.tk-amount`. Load the `brand-design` skill.
 
 ## Definition of done
 

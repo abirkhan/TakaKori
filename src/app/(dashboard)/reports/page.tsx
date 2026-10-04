@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinor, toMinor } from '@/lib/money'
-import { resolveRange, startOfMonthOffset, todayIn, type DateRangePreset } from '@/lib/dates'
+import { resolveRange, startOfMonthOffset, todayIn, monthLabel } from '@/lib/dates'
 import {
   getExpenseByCategory,
   getIncomeByCategory,
@@ -10,12 +10,15 @@ import {
   getPeriodSummary,
 } from '@/lib/queries/reports'
 import { CategoryBars, MonthlyTrend } from '@/components/reports/Charts'
-
+import { ProgressRing } from '@/components/ui/ProgressRing'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { StatTile } from '@/components/ui/StatTile'
+import { EmptyState } from '@/components/ui/EmptyState'
 const PERIODS = [
-  { value: 'month', label: 'This month' },
-  { value: 'quarter', label: 'This quarter' },
-  { value: 'year', label: 'This year' },
-  { value: 'last12', label: 'Last 12 months' },
+  { value: 'month', label: 'Month' },
+  { value: 'quarter', label: 'Quarter' },
+  { value: 'year', label: 'Year' },
+  { value: 'last12', label: '12 months' },
 ] as const
 
 type Params = Promise<Record<string, string | string[] | undefined>>
@@ -44,7 +47,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
   // "Last 12 months" is a rolling window anchored on the current month. It is
   // resolved here on the server in the user's timezone, never on the client.
   const isLast12 = raw === 'last12'
-  const preset = (isLast12 ? 'month' : raw) as DateRangePreset
+  const preset = (isLast12 ? 'month' : raw) as Parameters<typeof resolveRange>[0]
 
   const range = resolveRange(preset, timezone)
   if (!range) {
@@ -85,82 +88,99 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
 
   const hasData = monthly.some((m) => m.tx_count > 0)
 
-  return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Reports</h1>
-        <nav className="flex flex-wrap gap-1 text-sm">
-          {PERIODS.map((p) => (
-            <Link
-              key={p.value}
-              href={`/reports?period=${p.value}`}
-              aria-current={raw === p.value ? 'page' : undefined}
-              className={`rounded border px-3 py-1.5 ${
-                raw === p.value
-                  ? 'border-neutral-900 bg-neutral-900 text-white'
-                  : 'border-neutral-300 hover:bg-neutral-50'
-              }`}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
+  // Share of income that was kept, as a fraction for the ring. Null when there
+  // was no income: a savings rate against zero is not a low rate, it is
+  // undefined, and rendering it as 0% would read as "you saved nothing" rather
+  // than "there was nothing to save".
+  const savingsShare = income > 0 ? Math.min(1, Math.max(0, saved / income)) : null
 
-      <p className="-mt-4 text-sm text-neutral-500">
-        {reportRange.from} to {reportRange.to}
-      </p>
+  const activePeriod = PERIODS.find((p) => p.value === raw) ?? PERIODS[0]
+
+  return (
+    <div className="tk-stack">
+      <PageHeader eyebrow="Analytics" title="Reports">
+        {activePeriod.label === 'Month'
+          ? monthLabel(reportRange.from)
+          : `${reportRange.from} to ${reportRange.to}`}
+      </PageHeader>
+
+      {/* The period is a segmented control of links rather than a select: it is
+          the one control a user on this screen changes constantly, and four
+          options should not cost a dropdown to reveal. Links keep it
+          server-driven, so the range stays resolved in the user's timezone. */}
+      <nav aria-label="Period" className="tk-segment">
+        {PERIODS.map((p) => (
+          <Link
+            key={p.value}
+            href={`/reports?period=${p.value}`}
+            className="tk-segment-item"
+            data-active={raw === p.value}
+            aria-current={raw === p.value ? 'page' : undefined}
+          >
+            {p.label}
+          </Link>
+        ))}
+      </nav>
 
       {!hasData ? (
-        <p className="rounded border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">
-          Nothing recorded in this period.{' '}
-          <Link href="/transactions" className="underline">
-            Add a transaction
-          </Link>
-          .
-        </p>
+        <EmptyState
+          icon="chart"
+          title="Nothing recorded in this period"
+          description="Once there is a month of transactions, the trends and breakdowns appear here."
+          action={
+            <Link href="/transactions#add" className="tk-btn tk-btn-soft tk-btn-sm mt-1">
+              Add a transaction
+            </Link>
+          }
+        />
       ) : (
         <>
-          <section className="grid gap-4 sm:grid-cols-4">
-            {[
-              { label: 'Income', value: income, tone: 'text-emerald-700' },
-              { label: 'Expense', value: expense, tone: 'text-red-700' },
-              {
-                label: 'Saved',
-                value: saved,
-                tone: saved >= 0 ? 'text-emerald-700' : 'text-red-700',
-              },
-              {
-                label: 'Savings rate',
-                value: null,
-                text: savingsRate === null ? '—' : `${savingsRate.toFixed(0)}%`,
-                tone: (savingsRate ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700',
-              },
-            ].map((card) => (
-              <div key={card.label} className="rounded border border-neutral-200 p-4">
-                <p className="text-sm text-neutral-500">{card.label}</p>
-                <p className={`mt-1 text-xl font-semibold tabular-nums ${card.tone}`}>
-                  {'value' in card && card.value !== null ? money(card.value) : card.text}
-                </p>
+          <section className="tk-card">
+            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+              {savingsShare !== null && (
+                <ProgressRing
+                  value={savingsShare}
+                  tone={saved >= 0 ? 'brand' : 'rose'}
+                  label="Savings rate: share of income kept"
+                  size={168}
+                  stroke={15}
+                >
+                  {/* "Savings rate" is the name for this figure, not "Saved",
+                      which is the taka amount below it. Naming both the same
+                      way makes the ring read as a second money total. */}
+                  <p className="tk-eyebrow">Savings rate</p>
+                  <p className="tk-money mt-0.5">
+                    {savingsRate === null ? '—' : `${savingsRate.toFixed(0)}%`}
+                  </p>
+                  <p className="tk-caption mt-0.5">{money(saved)} kept</p>
+                </ProgressRing>
+              )}
+
+              <div className="flex w-full flex-1 items-start gap-3">
+                <StatTile icon="arrowDownLeft" tone="brand" label="Income" value={money(income)} />
+                <StatTile icon="arrowUpRight" tone="rose" label="Expense" value={money(expense)} />
               </div>
-            ))}
+            </div>
           </section>
 
-          <section className="rounded border border-neutral-200 p-4">
-            <h2 className="mb-4 text-lg font-medium">Income vs expense by month</h2>
+          <section className="tk-card">
+            <h2 className="tk-section mb-4">
+              {monthly.length < 2 ? 'This month' : 'Income vs expense by month'}
+            </h2>
             <MonthlyTrend
               points={points.map((p) => ({ ...p, label: shortLabel(p.label) }))}
               formatMoney={money}
             />
           </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <section className="rounded border border-neutral-200 p-4">
-              <h2 className="mb-4 text-lg font-medium">Where the money went</h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="tk-card">
+              <h2 className="tk-section mb-4">Where the money went</h2>
               {expenseByCategory.length === 0 ? (
-                <p className="text-sm text-neutral-500">No expenses in this period.</p>
+                <p className="tk-body text-muted">No expenses in this period.</p>
               ) : (
                 <CategoryBars
+                  tone="rose"
                   rows={expenseByCategory.map((r) => ({
                     name: r.category_name,
                     total: toMinor(r.total),
@@ -172,10 +192,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
               )}
             </section>
 
-            <section className="rounded border border-neutral-200 p-4">
-              <h2 className="mb-4 text-lg font-medium">Where it came from</h2>
+            <section className="tk-card">
+              <h2 className="tk-section mb-4">Where it came from</h2>
               {incomeByCategory.length === 0 ? (
-                <p className="text-sm text-neutral-500">No income in this period.</p>
+                <p className="tk-body text-muted">No income in this period.</p>
               ) : (
                 <CategoryBars
                   rows={incomeByCategory.map((r) => ({
@@ -191,9 +211,13 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
           </div>
 
           {transferred > 0 && (
-            <p className="text-sm text-neutral-500">
+            <p className="tk-caption">
               {money(transferred)} moved between accounts in this period. Transfers are not counted
-              as income or spending.
+              as income or spending.{' '}
+              <Link href="/transactions?type=transfer" className="text-accent font-medium">
+                See them
+              </Link>
+              .
             </p>
           )}
         </>

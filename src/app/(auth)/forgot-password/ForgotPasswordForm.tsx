@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { useActionState } from 'react'
 import { requestPasswordReset, type ActionState } from '../actions'
+import { Alert } from '@/components/ui/Alert'
+import { TextField } from '@/components/ui/Field'
+import { buttonClass } from '@/components/ui/button'
 
 export function ForgotPasswordForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
@@ -12,50 +15,38 @@ export function ForgotPasswordForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="text-lg font-medium">Reset password</h2>
+      <div>
+        <h1 className="tk-title">Reset password</h1>
+        <p className="tk-caption mt-1.5">We will email you a link to set a new one.</p>
+      </div>
 
-      {state.success && (
-        <p className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700">
-          {state.success}
-        </p>
-      )}
+      {state.success && <Alert tone="success">{state.success}</Alert>}
 
       {!state.success && (
         <>
-          {state.error && (
-            <p
-              role="alert"
-              className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
-              {state.error}
-            </p>
-          )}
+          {state.error && <Alert tone="error">{state.error}</Alert>}
 
-          <label className="flex flex-col gap-1 text-sm">
-            <span>Email</span>
-            <input
-              type="email"
-              name="email"
-              autoComplete="email"
-              required
-              className="rounded border border-neutral-300 px-3 py-2"
-            />
-            {state.fieldErrors?.email && (
-              <span className="text-xs text-red-600">{state.fieldErrors.email}</span>
-            )}
-          </label>
+          <TextField
+            name="email"
+            label="Email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            required
+            error={state.fieldErrors?.email}
+          />
 
           <button
             type="submit"
             disabled={pending}
-            className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
+            className={buttonClass('primary', { block: true })}
           >
             {pending ? 'Sending…' : 'Send reset link'}
           </button>
         </>
       )}
 
-      <Link href="/login" className="text-sm underline">
+      <Link href="/login" className="tk-caption self-center underline">
         Back to sign in
       </Link>
     </form>

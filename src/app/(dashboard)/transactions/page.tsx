@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { todayIn, resolveRange, type DateRangePreset } from '@/lib/dates'
+import { todayIn, resolveRange, monthLabel, type DateRangePreset } from '@/lib/dates'
 import { formatMinor, toMinor, toNumericString } from '@/lib/money'
 import { listAccounts, listCategories } from '@/lib/queries/reference'
 import { listTransactions } from '@/lib/queries/transactions'
@@ -9,6 +9,11 @@ import { TransactionForm } from '@/components/transactions/TransactionForm'
 import { TransactionFilters } from '@/components/transactions/TransactionFilters'
 import { deleteTransactionAction } from '@/actions/transactions'
 import { EditTransactionForm } from '@/components/transactions/EditTransactionForm'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Icon } from '@/components/ui/Icon'
+import { Row } from '@/components/ui/Row'
+import { amountClass, amountSign, buttonClass } from '@/components/ui/button'
 import type { TransactionType } from '@/types/database'
 
 const PAGE_SIZE = 50
@@ -73,126 +78,154 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     return qs ? `/transactions?${qs}` : '/transactions'
   }
 
-  return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Transactions</h1>
-        <a
-          href="/api/export/csv"
-          className="rounded border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50"
-        >
-          Export CSV
-        </a>
-      </div>
+  const periodLabel = range
+    ? preset === 'month'
+      ? monthLabel(range.from)
+      : `${range.from} to ${range.to}`
+    : 'All time'
 
-      <section className="rounded border border-neutral-200 p-4">
+  return (
+    <div className="tk-stack">
+      <PageHeader
+        eyebrow={`${visible.length} shown`}
+        title="Transactions"
+        action={
+          <a
+            href="/api/export/csv"
+            className={buttonClass('quiet', { size: 'sm' })}
+            aria-label="Export as CSV"
+          >
+            <Icon name="download" size={16} />
+            <span className="hidden sm:inline">Export CSV</span>
+          </a>
+        }
+      >
+        {periodLabel}
+      </PageHeader>
+
+      {/* The add form is first and always open: this is the action the tab bar's
+          floating button points at, and `#add` is where it lands. */}
+      <section className="tk-card scroll-mt-20">
         <TransactionForm accounts={accounts} categories={categories} today={todayIn(timezone)} />
       </section>
 
       {actionError && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {actionError}
+        <p role="alert" className="tk-alert tk-alert-error">
+          <Icon name="alert" size={17} className="mt-px shrink-0" />
+          <span>{actionError}</span>
         </p>
       )}
 
-      <Suspense fallback={<div className="text-sm text-neutral-400">Loading filters…</div>}>
+      <Suspense fallback={<div className="tk-card animate-fade h-24" aria-hidden="true" />}>
         <TransactionFilters accounts={accounts} categories={categories} />
       </Suspense>
 
       <section>
-        <h2 className="mb-3 text-lg font-medium">
-          {range
-            ? `Showing ${visible.length} (${range.from} to ${range.to})`
-            : `All time (${visible.length})`}
-        </h2>
-
         {visible.length === 0 ? (
-          <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">
-            Nothing matches these filters.
-          </p>
+          <EmptyState
+            icon="receipt"
+            title="Nothing matches these filters"
+            description="Widen the period, or clear the filters to see everything."
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                  <th className="py-2 font-normal">Date</th>
-                  <th className="py-2 font-normal">Description</th>
-                  <th className="py-2 font-normal">Category</th>
-                  <th className="py-2 font-normal">Account</th>
-                  <th className="py-2 text-right font-normal">Amount</th>
-                  <th className="py-2" />
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((t) => (
-                  <tr key={t.id} className="border-b border-neutral-100">
-                    <td className="py-2 whitespace-nowrap text-neutral-600">{t.occurred_on}</td>
-                    <td className="py-2">
-                      {t.description ?? <span className="text-neutral-400">—</span>}
-                    </td>
-                    <td className="py-2 text-neutral-600">
-                      {t.type === 'transfer'
-                        ? `→ ${t.counterparty_account?.name ?? '?'}`
-                        : (t.category?.name ?? '—')}
-                    </td>
-                    <td className="py-2 text-neutral-600">{t.account?.name ?? '—'}</td>
-                    <td
-                      className={`py-2 text-right font-medium whitespace-nowrap tabular-nums ${
-                        t.type === 'income'
-                          ? 'text-emerald-700'
-                          : t.type === 'expense'
-                            ? 'text-red-700'
-                            : 'text-neutral-500'
-                      }`}
-                    >
-                      {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}
+          <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+            {visible.map((t) => (
+              <li key={t.id} className="flex flex-col">
+                <Row
+                  icon={
+                    t.type === 'transfer'
+                      ? 'repeat'
+                      : t.type === 'income'
+                        ? 'arrowDownLeft'
+                        : 'arrowUpRight'
+                  }
+                  tone={t.type === 'income' ? 'brand' : t.type === 'transfer' ? 'sky' : 'rose'}
+                  title={t.description ?? t.category?.name ?? 'Transfer'}
+                  titleAttribute="tx-description"
+                  subtitle={[
+                    t.occurred_on,
+                    t.type === 'transfer'
+                      ? `→ ${t.counterparty_account?.name ?? '?'}`
+                      : (t.category?.name ?? undefined),
+                    t.account?.name ?? undefined,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  trailing={
+                    <span className={amountClass(t.type)}>
+                      {amountSign(t.type)}
                       {formatMinor(toMinor(t.amount), { currency, withSymbol: false })}
-                    </td>
-                    <td className="py-2 text-right">
-                      <details className="relative">
-                        <summary className="cursor-pointer text-xs underline">Edit</summary>
-                        <div className="absolute right-0 z-10 mt-1 rounded border border-neutral-200 bg-white p-3 shadow-lg">
-                          <EditTransactionForm
-                            transaction={{
-                              id: t.id,
-                              type: t.type,
-                              amount: toNumericString(toMinor(t.amount), currency),
-                              description: t.description,
-                              occurred_on: t.occurred_on,
-                            }}
-                          />
-                        </div>
-                      </details>
-                    </td>
-                    <td className="py-2 text-right">
-                      <form action={deleteTransactionAction}>
-                        <input type="hidden" name="id" value={t.id} />
-                        <button type="submit" className="text-xs text-red-600 underline">
-                          Delete
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </span>
+                  }
+                />
+
+                {/* Edit and delete sit behind one disclosure. A row with two
+                    always-visible actions puts eight competing targets in a list
+                    of four, and a permanent delete control on a financial
+                    record is the wrong default: the row's job is to be read, and
+                    reading is what this screen is for.
+
+                    Both are plain `<form action={serverAction}>` elements, so
+                    they work with no client JavaScript at all. */}
+                <details className="group -mt-1 mb-1 ml-[3.625rem]">
+                  <summary className="tk-caption rounded-pill text-accent inline-flex cursor-pointer list-none items-center gap-1 py-1.5 font-medium">
+                    <Icon name="sliders" size={13} />
+                    Edit or remove
+                    <Icon
+                      name="chevronDown"
+                      size={13}
+                      className="transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+
+                  <div className="tk-card-flat mt-1.5 flex flex-col gap-3">
+                    <EditTransactionForm
+                      transaction={{
+                        id: t.id,
+                        type: t.type,
+                        amount: toNumericString(toMinor(t.amount), currency),
+                        description: t.description,
+                        occurred_on: t.occurred_on,
+                      }}
+                    />
+
+                    <form
+                      action={deleteTransactionAction}
+                      className="border-hairline flex items-center justify-between gap-3 border-t pt-3"
+                    >
+                      <span className="tk-caption">Removes this record permanently.</span>
+                      <button type="submit" className={buttonClass('danger', { size: 'sm' })}>
+                        <Icon name="trash" size={15} />
+                        Delete
+                      </button>
+                    </form>
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
         )}
 
         {(offset > 0 || hasMore) && (
-          <nav className="mt-4 flex gap-2 text-sm">
-            {offset > 0 && (
-              <a href={queryFor(Math.max(0, offset - PAGE_SIZE))} className="underline">
+          <nav aria-label="Pagination" className="mt-4 flex items-center justify-between gap-3">
+            {offset > 0 ? (
+              <a
+                href={queryFor(Math.max(0, offset - PAGE_SIZE))}
+                className={buttonClass('quiet', { size: 'sm' })}
+              >
+                <Icon name="chevronRight" size={15} className="rotate-180" />
                 Previous
               </a>
+            ) : (
+              <span />
             )}
             {hasMore && (
-              <a href={queryFor(offset + PAGE_SIZE)} className="underline">
+              <a
+                href={queryFor(offset + PAGE_SIZE)}
+                className={buttonClass('quiet', { size: 'sm' })}
+              >
                 Next
+                <Icon name="chevronRight" size={15} />
               </a>
             )}
           </nav>

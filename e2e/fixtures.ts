@@ -43,14 +43,37 @@ async function removeMarkedTransactions(page: import('@playwright/test').Page): 
 
   await page.goto('/transactions?preset=all')
 
-  const marked = page.locator('tr').filter({ hasText: MARKER })
+  /**
+   * `li`, not `tr`: the transaction list is a card of rows rather than a table,
+   * because a seven-column table is unusable at 390px.
+   *
+   * Anchored on `[data-row-title]`, which `Row` emits only for a transaction's
+   * description. Matching on the row's whole text instead counts a transaction
+   * more than once — the per-row disclosure repeats the description inside its
+   * edit form — so the cleanup loop deletes rows it never created and then
+   * fails on a count that cannot reach zero. `has:` also requires the attribute
+   * to be an exact match, so a marker that is a prefix of another row's
+   * description does not pull that row in. Keep this in step with
+   * `src/app/(dashboard)/transactions`.
+   */
+  const marked = page.locator('li').filter({
+    has: page.locator(`[data-row-title="${MARKER}"]`),
+  })
 
   // Bounded so a delete that silently fails fails the test rather than hanging.
   for (let guard = 0; guard < 25; guard++) {
     const remaining = await marked.count()
     if (remaining === 0) return
 
-    await marked.first().getByRole('button', { name: 'Delete' }).click()
+    const row = marked.first()
+
+    // Delete lives inside the row's "Edit or remove" disclosure. Without opening
+    // it the button is `display: none` and the click times out, which would look
+    // like a delete failure rather than a selector that has fallen behind the UI.
+    const summary = row.locator('summary')
+    if (await summary.count()) await summary.click()
+
+    await row.getByRole('button', { name: 'Delete' }).click()
     await expect(marked).toHaveCount(remaining - 1, { timeout: 15_000 })
   }
 
@@ -109,10 +132,20 @@ export const writingTest = base.extend<{ signedIn: import('@playwright/test').Pa
   },
 })
 
+/**
+ * Sign in.
+ *
+ * Fields are located by `name`, not by label. `PasswordField` carries a reveal
+ * toggle whose `aria-label` is "Show password", and Playwright's `getByLabel`
+ * matches on a case-insensitive *substring* — so `getByLabel('Password')`
+ * resolves to both the input and the button and fails in strict mode. The name
+ * attribute is the field's actual contract and does not shift with the label's
+ * wording or with an added affordance.
+ */
 async function signIn(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/login')
-  await page.getByLabel('Email').fill(EMAIL!)
-  await page.getByLabel('Password').fill(PASSWORD!)
+  await page.locator('[name="email"]').fill(EMAIL!)
+  await page.locator('[name="password"]').fill(PASSWORD!)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.waitForURL('**/dashboard', { timeout: 20_000 })
 }

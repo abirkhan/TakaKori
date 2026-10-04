@@ -143,6 +143,85 @@ function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const
+
+/**
+ * Shift a `YYYY-MM-DD` by whole days and return a `YYYY-MM-DD`.
+ *
+ * The arithmetic happens on calendar fields in the user's timezone rather than
+ * on a millisecond offset. Subtracting 86,400,000 from an instant is wrong
+ * twice a year: across a DST transition the result lands on the same day or
+ * skips one, and "the last day of last month" is a figure a user will check.
+ */
+export function addDaysTo(ymd: string, days: number, timeZone: string): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+
+  // Calendar-field arithmetic on a UTC date, then re-read in the target zone.
+  // Adding 86,400,000 ms to the *instant* is the bug this avoids: across a DST
+  // boundary that instant is 23 or 25 hours later, so the same arithmetic
+  // returns the day you started on.
+  const shifted = new Date(Date.UTC(y, m - 1, d + days))
+  const ymdShifted = `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(
+    shifted.getUTCDate(),
+  )}`
+
+  // `todayIn` is what actually pins the result to the user's calendar, which is
+  // what makes this correct in every zone including the half-hour ones.
+  return todayIn(timeZone, startOfDayIn(timeZone, ymdShifted))
+}
+
+/**
+ * The month name for a `YYYY-MM-DD` or `YYYY-MM` string, e.g. "October".
+ *
+ * Display only. A screen that labels a figure "October" is claiming a period,
+ * and the boundary of that period has to come from `resolveRange` — not from
+ * formatting whatever date happened to be passed in. This function names a
+ * month; it never decides one.
+ */
+export function monthLabel(ym: string): string {
+  const month = Number(ym.slice(5, 7))
+  return MONTH_NAMES[month - 1] ?? ''
+}
+
+/**
+ * A short human date for a header or a row, e.g. "Sun, 4 Oct".
+ *
+ * Rendered in the user's timezone so the weekday matches the day they acted on.
+ * Formatting a `YYYY-MM-DD` with the default timezone instead would show the
+ * weekday of the neighbouring day for every user east or west of UTC — a bug
+ * that is invisible in UTC and obvious in Dhaka.
+ */
+export function formatDayLabel(ymd: string, timeZone: string): string {
+  return (
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    })
+      .format(startOfDayIn(timeZone, ymd))
+      // ICU's short month is "Sept" in en-GB and "Sep" elsewhere. Normalising
+      // keeps a label from changing width between users' browsers — and, more to
+      // the point, keeps the test honest: a literal expected string would pass on
+      // the build machine's ICU and fail on a user's.
+      .replace(/^(\w+)\s/, '$1, ')
+      .replace('Sept', 'Sep')
+  )
+}
+
 /**
  * Convert a user-entered YYYY-MM-DD into a Date at the *start* of that day in
  * the user's timezone. Used for export/report boundaries, never for storage.

@@ -1,11 +1,14 @@
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { todayIn } from '@/lib/dates'
+import { todayIn, monthLabel } from '@/lib/dates'
 import { formatMinor } from '@/lib/money'
 import { listCategories } from '@/lib/queries/reference'
 import { listBudgetsWithProgress } from '@/lib/queries/planning'
 import { BudgetForm } from '@/components/budgets/BudgetForm'
 import { BudgetCard } from '@/components/budgets/BudgetCard'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Alert } from '@/components/ui/Alert'
 
 export default async function BudgetsPage({
   searchParams,
@@ -35,31 +38,24 @@ export default async function BudgetsPage({
   const money = (minor: number) => formatMinor(minor, { currency })
 
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Budgets</h1>
-        <p className="text-sm text-neutral-500">
-          Monthly limits for {today.slice(0, 7)}. Pace is projected from your daily spending so far.
-        </p>
-      </div>
+    <div className="tk-stack">
+      <PageHeader eyebrow={monthLabel(today)} title="Budgets">
+        Pace is projected from your daily spending so far, so it is a forecast rather than a
+        restatement of the limit.
+      </PageHeader>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {error}
-        </p>
-      )}
+      {error && <Alert tone="error">{error}</Alert>}
 
-      <section className="rounded border border-neutral-200 p-4">
+      <section className="tk-card">
         <BudgetForm categories={categories} />
       </section>
 
       {budgets.length === 0 ? (
-        <p className="rounded border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">
-          No budgets yet. Add one above to start tracking pace.
-        </p>
+        <EmptyState
+          icon="target"
+          title="No budgets yet"
+          description="Set a monthly limit and this screen will tell you where the month is heading."
+        />
       ) : (
         <section className="flex flex-col gap-4">
           {budgets.map((b) => (

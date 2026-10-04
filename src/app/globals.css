@@ -1,26 +1,922 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ==========================================================================
+   TakaKori — brand & design tokens
+   --------------------------------------------------------------------------
+   This file is the machine-readable half of the design system. The prose half
+   is `docs/design-system.md`; the operational half is
+   `.opencode/skills/brand-design/SKILL.md`. Change a value here, then update
+   those two, or the system rots in three places instead of one.
+
+   Structure, top to bottom:
+
+     1. @theme      — maps tokens onto Tailwind utilities (bg-brand-600, …)
+     2. :root      — the light values themselves
+     3. dark       — the dark values, same names, no `dark:` prefixes anywhere
+     4. @layer base— element defaults, focus, motion
+     5. components — the `.tk-*` primitives every screen composes from
+
+   Why semantic names instead of raw Tailwind colours: `text-emerald-700` is a
+   decision, `text-income` is a role. Roles survive a brand change; palette
+   slots do not. If a component needs a colour that has no role here, the role
+   is missing — add it here rather than reaching for a palette class.
+   ========================================================================== */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* --- Brand ramp: emerald, sampled from the logotype's "Kori" ----------- */
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+  --color-brand-800: var(--brand-800);
+  --color-brand-900: var(--brand-900);
+
+  /* --- Ink ramp: the wallet body, near-black with a green cast ----------- */
+  --color-ink-50: var(--ink-50);
+  --color-ink-100: var(--ink-100);
+  --color-ink-200: var(--ink-200);
+  --color-ink-300: var(--ink-300);
+  --color-ink-400: var(--ink-400);
+  --color-ink-500: var(--ink-500);
+  --color-ink-600: var(--ink-600);
+  --color-ink-700: var(--ink-700);
+  --color-ink-800: var(--ink-800);
+  --color-ink-900: var(--ink-900);
+  --color-ink-950: var(--ink-950);
+
+  /* --- Roles ------------------------------------------------------------ */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunken: var(--sunken);
+  --color-hairline: var(--hairline);
+  --color-content: var(--content);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-income: var(--income);
+  --color-income-soft: var(--income-soft);
+  --color-expense: var(--expense);
+  --color-expense-soft: var(--expense-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  /* --- Shape ------------------------------------------------------------
+     Corners are the brand's voice as much as colour is. Cards are pill-round
+     (24px) and controls are pill-round; only fields and tiles are tightened.
+     Anything sharper reads as a different product. */
+  --radius-tile: 16px;
+  --radius-card: 24px;
+  --radius-field: 14px;
+  --radius-pill: 999px;
+
+  /* --- Elevation --------------------------------------------------------
+     Shadows are large, soft and low-contrast. This is a mobile interface seen
+     on a cheap panel in daylight: a hard drop shadow is noise, not depth. */
+  --shadow-card: 0 1px 2px rgb(var(--tint) / 0.04), 0 10px 30px -18px rgb(var(--tint) / 0.18);
+  --shadow-raised: 0 2px 6px rgb(var(--tint) / 0.06), 0 18px 40px -22px rgb(var(--tint) / 0.24);
+  --shadow-nav: 0 -12px 32px -22px rgb(var(--tint) / 0.4);
+  --shadow-fab: 0 10px 22px -8px rgb(var(--brand-600) / 0.5);
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-brand: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-rise: tk-rise 0.45s var(--ease-brand) both;
+  --animate-fade: tk-fade 0.3s var(--ease-brand) both;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Brand ramp. 600 is the primary action colour; 700 is pressed state. */
+  --brand-50: #eafaf2;
+  --brand-100: #c8f3de;
+  --brand-200: #93e6bf;
+  --brand-300: #55d39d;
+  --brand-400: #21bd80;
+  --brand-500: #0da56c;
+  --brand-600: #0a8a5b;
+  --brand-700: #0a6e4b;
+  --brand-800: #0b573d;
+  --brand-900: #0a4833;
+
+  /* Ink ramp. */
+  --ink-50: #eef2f3;
+  --ink-100: #e2e8ea;
+  --ink-200: #ccd6da;
+  --ink-300: #a9b8bd;
+  --ink-400: #7f929a;
+  --ink-500: #60737c;
+  --ink-600: #4b5c64;
+  --ink-700: #3a4950;
+  --ink-800: #26343a;
+  --ink-900: #142025;
+  --ink-950: #0b1316;
+
+  /* Roles — light. */
+  --canvas: #f2f5f4;
+  --surface: #ffffff;
+  --surface-2: #f7faf9;
+  --sunken: #eceff0;
+  --hairline: #e6ebea;
+  --content: var(--ink-900);
+  --muted: var(--ink-500);
+  --subtle: var(--ink-400);
+  --accent: var(--brand-600);
+  --accent-soft: var(--brand-50);
+  --on-accent: #ffffff;
+  --income: var(--brand-600);
+  --income-soft: var(--brand-50);
+  --expense: #cf3f4b;
+  --expense-soft: #fdeced;
+  --warning: #a1560b;
+  --warning-soft: #fdf1e0;
+
+  /* The wash: the brand gradient that sits behind the top of every screen. */
+  --wash-top: #d8f5e7;
+  --wash-mid: #f2f9f5;
+
+  --tint: 20 32 37;
+  --selection: var(--brand-200);
+  --selection-ink: var(--ink-900);
+
+  /* Categorical hues for icon tiles. Same role in both schemes: a soft fill
+     derived from the hue mixed into the surface, and the hue itself as ink. */
+  --hue-brand: var(--brand-600);
+  --hue-sky: #0369a1;
+  --hue-amber: #b45309;
+  --hue-rose: #be123c;
+  --hue-violet: #6d28d9;
+  --hue-teal: #0f766e;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+
+    /* The ramp itself does not change — it is the brand. What changes is which
+       slot is legible against the surface, so the mid-ramp steps come forward
+       and the deep steps recede. */
+    --accent: #2fc590;
+    --accent-soft: #0e2a22;
+    --on-accent: #04140e;
+    --income: #3dd29a;
+    --income-soft: #0e2a22;
+    --expense: #ff8189;
+    --expense-soft: #2c1618;
+    --warning: #f0b357;
+    --warning-soft: #2a1f10;
+
+    --canvas: #0b1316;
+    --surface: #121d21;
+    --surface-2: #18252a;
+    --sunken: #0f1a1e;
+    --hairline: #223137;
+    --content: #e7efec;
+    --muted: #95a7ad;
+    --subtle: #6f828a;
+
+    --wash-top: #0f3d2e;
+    --wash-mid: #0d1a1d;
+
+    --tint: 0 0 0;
+    --selection: var(--brand-700);
+    --selection-ink: #eafaf2;
+
+    --hue-brand: #34d399;
+    --hue-sky: #38bdf8;
+    --hue-amber: #fbbf24;
+    --hue-rose: #fb7185;
+    --hue-violet: #a78bfa;
+    --hue-teal: #2dd4bf;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html {
+    /* The app is a PWA; a tap on a list row should not flash a blue block. */
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--content);
+    /* One focus treatment, everywhere. Keyboard users get a visible ring;
+       pointer users never see it. */
+    font-family:
+      var(--font-geist-sans),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--selection);
+    color: var(--selection-ink);
+  }
+
+  /* iOS renders a date input at 22px unless told otherwise, which breaks the
+     rhythm of a 14px field label next to it. */
+  input[type='date'],
+  input[type='time'] {
+    min-height: 2.75rem;
+    font-size: 0.9375rem;
+  }
+}
+
+@keyframes tk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tk-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   Components
+   --------------------------------------------------------------------------
+   Ten primitives, composed everywhere. Reach for these before inventing a
+   one-off class string; a screen that needs a shape not here is a signal that
+   the shape is missing from the system, not that the screen should improvise.
+   ========================================================================== */
+
+@layer components {
+  /* --- Layout ---------------------------------------------------------- */
+
+  /* Horizontal rhythm. 20px side padding on a phone, 24px from `sm` up. */
+  .tk-shell {
+    width: 100%;
+    margin-inline: auto;
+    max-width: 30rem;
+    padding-inline: 1.25rem;
+  }
+  @media (min-width: 40rem) {
+    .tk-shell {
+      max-width: 48rem;
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 64rem) {
+    .tk-shell {
+      max-width: 72rem;
+    }
+  }
+
+  /* Vertical rhythm between blocks on a screen. */
+  .tk-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .tk-stack-tight {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* The brand wash. Absolutely positioned, inert, and taller than any hero so
+     the fade lands below the first card on every screen. */
+  .tk-wash {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 24rem;
+    pointer-events: none;
+    background: linear-gradient(180deg, var(--wash-top) 0%, var(--wash-mid) 62%, transparent 100%);
+  }
+
+  /* --- Surfaces -------------------------------------------------------- */
+
+  .tk-card {
+    border-radius: var(--radius-card);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-card);
+    padding: 1.25rem;
+  }
+
+  /* A card with no shadow, for content that should read as part of a card
+     above it rather than as another card. */
+  .tk-card-flat {
+    border-radius: var(--radius-card);
+    background-color: var(--surface-2);
+    padding: 1rem;
+  }
+
+  /* Pressable card/row. The whole row is the target, thumb-sized. */
+  .tk-row {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    min-height: 3.75rem;
+    padding-block: 0.875rem;
+  }
+
+  .tk-divider {
+    height: 1px;
+    background-color: var(--hairline);
+  }
+
+  /* --- Typography ------------------------------------------------------ */
+
+  /* Screen title. One per screen, always the h1, always left-aligned. */
+  .tk-title {
+    font-size: 1.625rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    color: var(--content);
+  }
+
+  .tk-section {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--content);
+  }
+
+  /* The small grey line above a number. Never the place a unit or a sign goes. */
+  .tk-eyebrow {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--muted);
+  }
+
+  .tk-body {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--content);
+  }
+
+  .tk-caption {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--subtle);
+  }
+
+  /* Every money figure uses these. `tabular-nums` is not optional: columns of
+     taka that jitter as digits change are unreadable, and this app is columns
+     of taka. Formatted values come from `formatMinor`, never from arithmetic. */
+  .tk-money {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--content);
+  }
+
+  .tk-money-lg {
+    font-size: 2.5rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    color: var(--content);
+  }
+
+  .tk-amount {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* No `white-space: nowrap` here, unlike `.tk-amount`. This size is used for
+     the figures inside a three-across stat row, and a nowrap figure there
+     pushes the neighbouring tiles off the card rather than shrinking. */
+  .tk-amount-lg {
+    font-size: 1.125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- Money tone ------------------------------------------------------ */
+
+  .tk-income {
+    color: var(--income);
+  }
+  .tk-expense {
+    color: var(--expense);
+  }
+  .tk-neutral {
+    color: var(--muted);
+  }
+
+  /* --- Buttons --------------------------------------------------------- */
+
+  /* 48px minimum height: the smallest comfortable touch target on a phone. */
+  .tk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 3rem;
+    /* Without this a two-word label in a flex row wraps mid-phrase next to an
+       icon, which reads as a rendering bug rather than a narrow button. */
+    white-space: nowrap;
+    padding-inline: 1.25rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition:
+      transform 0.15s var(--ease-brand),
+      opacity 0.15s var(--ease-brand);
+  }
+  .tk-btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .tk-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .tk-btn-primary {
+    background-color: var(--accent);
+    color: var(--on-accent);
+    box-shadow: var(--shadow-fab);
+  }
+
+  .tk-btn-soft {
+    background-color: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .tk-btn-ghost {
+    background-color: transparent;
+    color: var(--muted);
+  }
+
+  .tk-btn-quiet {
+    background-color: var(--sunken);
+    color: var(--content);
+  }
+
+  .tk-btn-danger {
+    background-color: var(--expense-soft);
+    color: var(--expense);
+  }
+
+  .tk-btn-sm {
+    min-height: 2.25rem;
+    padding-inline: 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Full-width primary action, the shape every form ends with. */
+  .tk-btn-block {
+    width: 100%;
+  }
+
+  /* Circular icon button for app-bar actions. */
+  .tk-btn-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--radius-pill);
+    background-color: color-mix(in oklab, var(--surface) 70%, transparent);
+    color: var(--content);
+    cursor: pointer;
+    transition: transform 0.15s var(--ease-brand);
+  }
+  .tk-btn-icon:active {
+    transform: scale(0.94);
+  }
+
+  /* --- Fields ---------------------------------------------------------- */
+
+  .tk-field {
+    width: 100%;
+    min-height: 3rem;
+    border-radius: var(--radius-field);
+    border: 1px solid var(--hairline);
+    background-color: var(--surface);
+    padding-inline: 0.9375rem;
+    font-size: 0.9375rem;
+    color: var(--content);
+    transition: border-color 0.15s var(--ease-brand);
+  }
+  .tk-field::placeholder {
+    color: var(--subtle);
+  }
+  .tk-field:hover {
+    border-color: var(--ink-200);
+  }
+  .tk-field:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+  }
+  .tk-field:focus-visible {
+    outline: none;
+  }
+
+  /* Native select needs the chevron suppressed in both schemes; the OS paints
+     it in a colour that vanishes on a dark surface. */
+  .tk-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      right 1.15rem center,
+      right 0.85rem center;
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 2.5rem;
+  }
+
+  .tk-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  /* The amount field is the one input that gets display treatment: it is what
+     the user came to enter, and a 15px field makes a taka figure feel like a
+     footnote. Tabular figures, because a user correcting a digit needs the
+     digits to stay put. */
+  .tk-field-money {
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    min-height: 3.25rem;
+  }
+
+  .tk-field-error {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--expense);
+  }
+
+  /* --- Segmented control -----------------------------------------------
+     Replaces radio buttons wherever the choice is 2–3 mutually exclusive
+     options that the user switches between constantly (income / expense /
+     transfer, month / quarter / year). Same pattern on every screen. */
+
+  .tk-segment {
+    display: inline-flex;
+    width: 100%;
+    padding: 0.25rem;
+    gap: 0.25rem;
+    border-radius: var(--radius-pill);
+    background-color: color-mix(in oklab, var(--sunken) 80%, transparent);
+  }
+
+  /* A segment with more than three options cannot fit at 390px — the labels
+     need roughly 90px each. Rather than shrinking them to unreadable or
+     truncating them, the row scrolls horizontally and snaps. Each item keeps its
+     intrinsic width, so "This month" stays a whole label. */
+  .tk-segment-scroll {
+    display: flex;
+    width: 100%;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tk-segment-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .tk-segment-scroll > * {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+  }
+
+  .tk-segment-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    min-height: 2.5rem;
+    padding-inline: 0.75rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+      background-color 0.2s var(--ease-brand),
+      color 0.2s var(--ease-brand);
+  }
+
+  /* Share the row evenly when the options fit; go intrinsic when they scroll. */
+  .tk-segment > .tk-segment-item {
+    flex: 1;
+  }
+  .tk-segment-item[data-active='true'] {
+    background-color: var(--surface);
+    color: var(--accent);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* --- Chips ------------------------------------------------------------ */
+
+  .tk-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.25rem;
+    padding-inline: 0.875rem;
+    border-radius: var(--radius-pill);
+    background-color: var(--surface);
+    color: var(--content);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .tk-chip-active {
+    background-color: var(--accent);
+    color: var(--on-accent);
+  }
+
+  /* --- Icon tiles ------------------------------------------------------- */
+
+  /* The rounded square that carries an icon in a list row. */
+  /* The rounded square that carries an icon in a list row.
+     The colours come from `--tone-fill`/`--tone-ink`, which a `.tk-tone-*` class
+     sets on the element. Only this rule declares `background-color` and `color`,
+     so the tone never has to win a cascade against a sibling class — which is
+     what silently broke every non-brand tone when both rules declared them. */
+  .tk-tile {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: var(--radius-tile);
+    background-color: var(--tone-fill, var(--accent-soft));
+    color: var(--tone-ink, var(--accent));
+  }
+
+  .tk-tile-sm {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 12px;
+  }
+
+  .tk-tile-lg {
+    width: 3.25rem;
+    height: 3.25rem;
+  }
+
+  /* Categorical tones.
+     Each tone class sets both custom properties `.tk-tile` reads, so it is
+     complete on its own. That is deliberate: with a shared bare `.tk-tone` rule
+     doing the work, a tone silently degraded to the brand colour because the
+     two-property indirection resolved to nothing — and every tile in the app
+     rendered green regardless of the tone it was given.
+
+     The fill is the hue mixed into the *current* surface, so one class works in
+     both schemes with no `dark:` variant. */
+  .tk-tone-brand {
+    --tone-fill: color-mix(in oklab, var(--hue-brand) 14%, var(--surface));
+    --tone-ink: var(--hue-brand);
+  }
+  .tk-tone-sky {
+    --tone-fill: color-mix(in oklab, var(--hue-sky) 14%, var(--surface));
+    --tone-ink: var(--hue-sky);
+  }
+  .tk-tone-amber {
+    --tone-fill: color-mix(in oklab, var(--hue-amber) 14%, var(--surface));
+    --tone-ink: var(--hue-amber);
+  }
+  .tk-tone-rose {
+    --tone-fill: color-mix(in oklab, var(--hue-rose) 14%, var(--surface));
+    --tone-ink: var(--hue-rose);
+  }
+  .tk-tone-violet {
+    --tone-fill: color-mix(in oklab, var(--hue-violet) 14%, var(--surface));
+    --tone-ink: var(--hue-violet);
+  }
+  .tk-tone-teal {
+    --tone-fill: color-mix(in oklab, var(--hue-teal) 14%, var(--surface));
+    --tone-ink: var(--hue-teal);
+  }
+
+  /* --- Badges ----------------------------------------------------------- */
+
+  .tk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1875rem 0.5625rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .tk-badge-neutral {
+    background-color: var(--sunken);
+    color: var(--muted);
+  }
+  .tk-badge-income {
+    background-color: var(--income-soft);
+    color: var(--income);
+  }
+  .tk-badge-expense {
+    background-color: var(--expense-soft);
+    color: var(--expense);
+  }
+  .tk-badge-warning {
+    background-color: var(--warning-soft);
+    color: var(--warning);
+  }
+
+  /* --- Alerts ----------------------------------------------------------- */
+
+  .tk-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    border-radius: var(--radius-field);
+    padding: 0.8125rem 1rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+  .tk-alert-error {
+    background-color: var(--expense-soft);
+    color: var(--expense);
+  }
+  .tk-alert-success {
+    background-color: var(--income-soft);
+    color: var(--income);
+  }
+  .tk-alert-warning {
+    background-color: var(--warning-soft);
+    color: var(--warning);
+  }
+  .tk-alert-info {
+    background-color: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* --- Progress --------------------------------------------------------- */
+
+  .tk-progress {
+    height: 0.5rem;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background-color: var(--sunken);
+  }
+
+  /* Each fill class is complete on its own — geometry *and* colour — because a
+     caller naming only a tone modifier (`tk-progress-bar-income`) would
+     otherwise get a fill with no height: a bar that renders as an empty track,
+     which looks exactly like real data. The geometry is repeated rather than
+     inherited from a base class precisely so it cannot be forgotten. */
+  .tk-progress-bar,
+  .tk-progress-bar-income,
+  .tk-progress-bar-warning,
+  .tk-progress-bar-expense {
+    height: 100%;
+    border-radius: var(--radius-pill);
+  }
+
+  .tk-progress-bar {
+    background-color: var(--accent);
+  }
+  .tk-progress-bar-income {
+    background-color: var(--income);
+  }
+  .tk-progress-bar-warning {
+    background-color: var(--warning);
+  }
+  .tk-progress-bar-expense {
+    background-color: var(--expense);
+  }
+
+  /* --- Empty state ------------------------------------------------------ */
+
+  .tk-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: var(--radius-card);
+    border: 1.5px dashed var(--hairline);
+    padding: 2rem 1.25rem;
+    text-align: center;
+  }
+
+  /* --- Navigation ------------------------------------------------------- */
+
+  .tk-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.25rem;
+  }
+
+  .tk-nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+    padding-block: 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--subtle);
+    transition: color 0.2s var(--ease-brand);
+  }
+  .tk-nav-link[data-active='true'] {
+    color: var(--accent);
+  }
+
+  /* The active-tab marker. Colour alone is not a state indicator — this is the
+     channel that survives a colour-blind reader and a greyscale screenshot. */
+  .tk-nav-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background-color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s var(--ease-brand);
+  }
+  .tk-nav-link[data-active='true'] .tk-nav-dot {
+    opacity: 1;
+  }
+
+  /* The floating add button, centred over the tab bar. */
+  .tk-fab {
+    display: grid;
+    place-items: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: var(--radius-pill);
+    background-color: var(--accent);
+    color: var(--on-accent);
+    box-shadow: var(--shadow-fab);
+    transition: transform 0.18s var(--ease-brand);
+  }
+  .tk-fab:active {
+    transform: scale(0.94);
+  }
+
+  /* --- Skip link -------------------------------------------------------- */
+
+  .tk-skip {
+    position: absolute;
+    left: -9999px;
+    top: 0.5rem;
+    z-index: 60;
+    border-radius: var(--radius-pill);
+    background-color: var(--surface);
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--accent);
+    box-shadow: var(--shadow-raised);
+  }
+  .tk-skip:focus {
+    left: 0.75rem;
+  }
 }

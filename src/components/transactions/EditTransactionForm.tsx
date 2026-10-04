@@ -3,6 +3,9 @@
 import { useActionState } from 'react'
 import { updateTransactionAction, type ActionState } from '@/actions/transactions'
 import type { ExportableTransaction } from '@/lib/csv'
+import { Alert } from '@/components/ui/Alert'
+import { TextField } from '@/components/ui/Field'
+import { buttonClass } from '@/components/ui/button'
 
 /**
  * Inline edit for a transaction's mutable fields.
@@ -24,63 +27,40 @@ export function EditTransactionForm({
   )
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 text-sm">
+    <form action={formAction} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={transaction.id} />
 
-      {state.error && (
-        <p role="alert" className="text-xs text-red-600">
-          {state.error}
-        </p>
-      )}
+      {state.error && <Alert tone="error">{state.error}</Alert>}
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Amount</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            name="amount"
-            defaultValue={String(transaction.amount)}
-            className="w-28 rounded border border-neutral-300 px-2 py-1 tabular-nums"
-          />
-        </label>
+      <div className="grid gap-3 sm:grid-cols-[8rem_10rem_1fr_auto] sm:items-end">
+        <TextField
+          name="amount"
+          label="Amount"
+          inputMode="decimal"
+          defaultValue={String(transaction.amount)}
+          className="tabular-nums"
+          error={state.fieldErrors?.amount}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Date</span>
-          <input
-            type="date"
-            name="occurredOn"
-            defaultValue={transaction.occurred_on}
-            className="rounded border border-neutral-300 px-2 py-1"
-          />
-        </label>
+        <TextField
+          name="occurredOn"
+          label="Date"
+          type="date"
+          defaultValue={transaction.occurred_on}
+          error={state.fieldErrors?.occurredOn}
+        />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-neutral-500">Description</span>
-          <input
-            type="text"
-            name="description"
-            maxLength={500}
-            defaultValue={transaction.description ?? ''}
-            className="w-44 rounded border border-neutral-300 px-2 py-1"
-          />
-        </label>
+        <TextField
+          name="description"
+          label="Description"
+          maxLength={500}
+          defaultValue={transaction.description ?? ''}
+        />
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded border border-neutral-300 px-2 py-1 hover:bg-neutral-50 disabled:opacity-50"
-        >
+        <button type="submit" disabled={pending} className={buttonClass('soft', { size: 'sm' })}>
           {pending ? 'Saving…' : 'Save'}
         </button>
       </div>
-
-      {(state.fieldErrors?.amount || state.fieldErrors?.occurredOn) && (
-        <div className="flex flex-col gap-0.5 text-xs text-red-600">
-          {state.fieldErrors.amount && <span>{state.fieldErrors.amount}</span>}
-          {state.fieldErrors.occurredOn && <span>{state.fieldErrors.occurredOn}</span>}
-        </div>
-      )}
     </form>
   )
 }

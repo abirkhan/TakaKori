@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
+  <!--
+    The TakaKori mark, standalone. Colours are inlined rather than referencing
+    CSS custom properties because this file is fetched as an image by the
+    manifest and the home screen, where no document stylesheet applies.
+    Emerald #0a8a5b / #21bd80 on ink #142025 — the same tokens as globals.css.
+  -->
+  <rect width="40" height="40" rx="9" fill="#142025" />
+  <path
+    d="M6.2 15.6 22.8 7.7a2.6 2.6 0 0 1 3.3.35l1.5 2a2.6 2.6 0 0 1-.35 3.35L10.6 21.4a2.6 2.6 0 0 1-3.35-.35l-1.5-2a2.6 2.6 0 0 1 .45-3.45Z"
+    fill="#21bd80"
+  />
+  <path
+    d="M10.6 22.4 27.2 14.5a2.6 2.6 0 0 1 3.3.35l1.5 2a2.6 2.6 0 0 1-.35 3.35L15 28.2a2.6 2.6 0 0 1-3.35-.35l-1.5-2a2.6 2.6 0 0 1 .45-3.45Z"
+    fill="#0a8a5b"
+  />
+  <rect x="4" y="19" width="32" height="18.5" rx="6" fill="#f2f5f4" />
+  <circle cx="28.5" cy="28.25" r="4" fill="#0a8a5b" />
+</svg>

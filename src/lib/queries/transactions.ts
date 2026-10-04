@@ -31,7 +31,14 @@ export interface TransactionFilters {
  */
 export interface TransactionWithRelations {
   id: string
-  type: string
+  /**
+   * Narrowed from the generated `string` to the union the database enforces.
+   * A CHECK constraint guarantees only one of three values can reach this
+   * interface, and typing it as `string` forces every call site to re-decide
+   * how to colour a transfer — which is how a transfer ends up rendered as an
+   * expense somewhere (ADR-005).
+   */
+  type: TransactionType
   amount: string | number
   description: string | null
   occurred_on: string

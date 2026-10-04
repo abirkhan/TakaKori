@@ -37,6 +37,32 @@ async function chooseType(form: Locator, type: 'income' | 'expense' | 'transfer'
     .click()
 }
 
+/**
+ * Choose a filter period.
+ *
+ * The filter bar renders period presets as a segmented control of `sr-only`
+ * radios, for the same reason `chooseType` clicks a label rather than checking
+ * the input: `check()` rejects an invisible element and `check({ force: true })`
+ * dispatches at coordinates where nothing is painted, so React never sees it.
+ */
+async function choosePeriod(page: Page, label: string) {
+  await page
+    .locator('label')
+    .filter({ hasText: new RegExp(`^${label}$`) })
+    .click()
+}
+
+/**
+ * The filter bar, scoped.
+ *
+ * `getByLabel('Account')` alone matches both the filter's account select and
+ * the add-form's, because both sit on the same page and both wrap their
+ * control in a label. The filter card is the one carrying `aria-label="Filters"`.
+ */
+function filterBar(page: Page): Locator {
+  return page.locator('section[aria-label="Filters"]')
+}
+
 test('unauthenticated visitors are redirected away from the dashboard', async ({ page }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login/)
@@ -152,16 +178,17 @@ authedTest('the period filter narrows the list via the URL', async ({ signedIn }
   await signedIn.goto('/transactions')
   // The filter writes to ?preset=, which the server resolves in the user's
   // timezone. The client never computes a date boundary.
-  const period = signedIn.getByLabel('Period')
+  const filters = filterBar(signedIn)
+  const account = filters.getByLabel('Account')
 
-  await period.selectOption('year')
+  await choosePeriod(signedIn, 'This year')
   await signedIn.waitForURL(/preset=year/)
 
   // Regression guard: the filter bar used to latch into `disabled` after the
   // first change, so a second filter could never be set.
-  await expect(period).toBeEnabled()
+  await expect(account).toBeEnabled()
 
-  await period.selectOption('month')
+  await choosePeriod(signedIn, 'This month')
   await signedIn.waitForURL(/preset=month/)
 })
 
@@ -201,19 +228,34 @@ authedTest('signing out returns to the login page', async ({ signedIn }) => {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Read the total balance from the dashboard's balance card.
+ *
+ * Addressed by `[data-balance]`, not by "the second `<p>` inside a div whose
+ * text starts with Total balance". A positional selector couples the test to the
+ * card's markup: adding or reordering a line inside it silently starts reading
+ * the wrong figure, and the assertion then fails on a number that was never
+ * wrong. One attribute means the test breaks only if the value it checks is
+ * genuinely gone.
+ */
 async function readTotalBalance(page: Page): Promise<string> {
   await page.goto('/dashboard')
-  const card = page
-    .locator('div')
-    .filter({ hasText: /^Total balance/ })
-    .first()
-  return await card.locator('p').nth(1).innerText()
+  return await page.locator('[data-balance]').innerText()
 }
 
+/**
+ * Read one account's balance from the dashboard's account list.
+ *
+ * Anchored on the row title rather than on the row's whole text, and read from
+ * the trailing slot rather than from the last `span` — the same coupling problem
+ * as `readTotalBalance`, in the row that a `<span>` reordering would break.
+ */
 async function readAccountBalance(page: Page, name: string): Promise<string> {
   await page.goto('/dashboard')
-  const row = page.locator('li').filter({ hasText: name }).first()
-  return await row.locator('span').last().innerText()
+  const row = page.locator('li').filter({
+    has: page.locator(`[data-row-title="${name}"]`),
+  })
+  return await row.locator('[data-row-trailing]').innerText()
 }
 
 /** The Supabase project ref, which is the middle of the session cookie name. */
@@ -226,12 +268,22 @@ function projectRef(): string {
 
 /**
  * Parse a rendered figure such as "৳2,26,050.25" or "−৳1,234.56" into minor
- * units (poisha). Written independently of src/lib/money.ts so the test checks
- * the rendered string rather than trusting the code that produced it.
+ * units (poisha).
+ *
+ * Written independently of src/lib/money.ts so the test checks the rendered
+ * string rather than trusting the code that produced it — which is the whole
+ * point of parsing it again here.
+ *
+ * The digits are split and recombined as strings rather than multiplied by 100
+ * as a float. `1234.56 * 100` is `123455.9999999999` in IEEE 754, so a naive
+ * parse made `expect(diff).toBe(-12345)` fail on a correct figure whenever the
+ * balance happened to carry a third fractional digit. It passed for months only
+ * because the seeded balances' errors happened to cancel.
  */
 function toMinor(formatted: string): number {
-  const cleaned = formatted.replace(/[^\d.-]/g, '')
-  const negative = cleaned.trim().startsWith('-')
-  const minor = Math.abs(Number(cleaned || '0')) * 100 // BDT has 2 decimal places
-  return negative ? -minor : minor
+  const cleaned = formatted.replace(/[^\d.-]/g, '').trim()
+  const negative = cleaned.startsWith('-')
+  const [whole = '0', fraction = ''] = cleaned.replace('-', '').split('.')
+  const poisha = Number(whole) * 100 + Number(fraction.padEnd(2, '0').slice(0, 2) || '0')
+  return negative ? -poisha : poisha
 }

@@ -3,16 +3,19 @@
 import Link from 'next/link'
 import { useActionState } from 'react'
 import { signUp, type ActionState } from '../actions'
+import { Alert } from '@/components/ui/Alert'
+import { PasswordField, TextField } from '@/components/ui/Field'
+import { buttonClass } from '@/components/ui/button'
 
 export function SignUpForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(signUp, {})
 
   if (state.success) {
     return (
-      <div className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Check your email</h2>
-        <p className="text-sm text-neutral-600">{state.success}</p>
-        <Link href="/login" className="text-sm underline">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <h1 className="tk-title">Check your email</h1>
+        <p className="tk-body text-muted">{state.success}</p>
+        <Link href="/login" className={buttonClass('soft', { block: true })}>
           Back to sign in
         </Link>
       </div>
@@ -21,72 +24,49 @@ export function SignUpForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="text-lg font-medium">Create an account</h2>
+      <div>
+        <h1 className="tk-title">Create your account</h1>
+        <p className="tk-caption mt-1.5">Free, and your records stay yours.</p>
+      </div>
 
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {state.error}
-        </p>
-      )}
+      {state.error && <Alert tone="error">{state.error}</Alert>}
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Name</span>
-        <input
-          type="text"
-          name="fullName"
-          autoComplete="name"
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        />
-        {state.fieldErrors?.fullName && (
-          <span className="text-xs text-red-600">{state.fieldErrors.fullName}</span>
-        )}
-      </label>
+      <TextField
+        name="fullName"
+        label="Name"
+        autoComplete="name"
+        placeholder="Abir Hossain"
+        required
+        error={state.fieldErrors?.fullName}
+      />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Email</span>
-        <input
-          type="email"
-          name="email"
-          autoComplete="email"
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        />
-        {state.fieldErrors?.email && (
-          <span className="text-xs text-red-600">{state.fieldErrors.email}</span>
-        )}
-      </label>
+      <TextField
+        name="email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        placeholder="you@example.com"
+        required
+        error={state.fieldErrors?.email}
+      />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Password</span>
-        <input
-          type="password"
-          name="password"
-          autoComplete="new-password"
-          minLength={8}
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        />
-        <span className="text-xs text-neutral-500">At least 8 characters</span>
-        {state.fieldErrors?.password && (
-          <span className="text-xs text-red-600">{state.fieldErrors.password}</span>
-        )}
-      </label>
+      <PasswordField
+        name="password"
+        label="Password"
+        autoComplete="new-password"
+        minLength={8}
+        required
+        hint="At least 8 characters"
+        error={state.fieldErrors?.password}
+      />
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-      >
+      <button type="submit" disabled={pending} className={buttonClass('primary', { block: true })}>
         {pending ? 'Creating account…' : 'Create account'}
       </button>
 
-      <p className="text-sm">
+      <p className="tk-caption text-center">
         Already have an account?{' '}
-        <Link href="/login" className="underline">
+        <Link href="/login" className="text-accent font-semibold">
           Sign in
         </Link>
       </p>

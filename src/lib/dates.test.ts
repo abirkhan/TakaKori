@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { resolveRange, todayIn, startOfDayIn } from '@/lib/dates'
+import {
+  resolveRange,
+  todayIn,
+  startOfDayIn,
+  addDaysTo,
+  monthLabel,
+  formatDayLabel,
+} from '@/lib/dates'
 
 const DHAKA = 'Asia/Dhaka' // UTC+6, no DST
 const KOLKATA = 'Asia/Kolkata' // UTC+5:30 — half-hour offset
@@ -124,5 +131,61 @@ describe('startOfDayIn', () => {
     for (const tz of [DHAKA, KOLKATA, NEW_YORK]) {
       expect(todayIn(tz, startOfDayIn(tz, '2026-09-30'))).toBe('2026-09-30')
     }
+  })
+})
+
+describe('monthLabel', () => {
+  it('names the month from a YYYY-MM-DD string', () => {
+    expect(monthLabel('2026-09-01')).toBe('September')
+    expect(monthLabel('2026-01-31')).toBe('January')
+  })
+
+  it('accepts a bare YYYY-MM string', () => {
+    expect(monthLabel('2026-12')).toBe('December')
+  })
+
+  it('returns an empty string rather than undefined for an out-of-range month', () => {
+    expect(monthLabel('2026-13-01')).toBe('')
+  })
+})
+
+describe('formatDayLabel', () => {
+  it('renders the weekday of the local calendar day', () => {
+    // 2026-09-30 is a Wednesday everywhere it is the same calendar day.
+    expect(formatDayLabel('2026-09-30', DHAKA)).toBe('Wed, 30 Sep')
+  })
+
+  it('agrees with todayIn across zones, including a half-hour offset', () => {
+    for (const tz of [DHAKA, KOLKATA, NEW_YORK]) {
+      const label = formatDayLabel('2026-09-30', tz)
+      expect(label).toContain('30 Sep')
+    }
+  })
+
+  it('shifts by whole calendar days across a DST boundary', () => {
+    // US DST ends 2026-11-01. Subtracting 86,400,000ms from midnight on 2 Nov
+    // lands on midnight on 31 Oct but formatted in UTC it drifts; adding a day
+    // must produce the calendar day either way.
+    expect(addDaysTo('2026-11-01', 1, NEW_YORK)).toBe('2026-11-02')
+    expect(addDaysTo('2026-11-02', -1, NEW_YORK)).toBe('2026-11-01')
+    expect(addDaysTo('2026-11-02', -1, DHAKA)).toBe('2026-11-01')
+    // Month length: the day before a month start is the previous month's last.
+    expect(addDaysTo('2026-03-01', -1, DHAKA)).toBe('2026-02-28')
+    expect(addDaysTo('2028-03-01', -1, DHAKA)).toBe('2028-02-29')
+  })
+
+  it('renders the instant in the user zone, not in UTC', () => {
+    // Midnight in Dhaka on the 30th is 18:00Z on the 29th, so the same instant
+    // is a different calendar day depending on the zone it is printed in.
+    const instant = startOfDayIn(DHAKA, '2026-09-30')
+    const inUtc = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'UTC',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    }).format(instant)
+
+    expect(inUtc).toMatch(/^Tue,? 29 Sep/)
+    expect(formatDayLabel('2026-09-30', DHAKA)).toBe('Wed, 30 Sep')
   })
 })

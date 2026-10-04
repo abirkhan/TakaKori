@@ -553,6 +553,86 @@ matched against, so without it no auth flow can work.
 
 ---
 
+## ADR-027 — Design tokens as CSS custom properties, not Tailwind palette classes
+
+**Status:** Accepted
+
+**Decision:** Every colour a component can use is a **role** (`surface`, `content`,
+`income`, `expense`, `accent`) resolved through CSS custom properties in
+`@theme inline`. Dark mode is one block of variable overrides, and no component
+contains a `dark:` variant.
+
+**Reason:** Tailwind's palette classes make every colour a decision with no
+memory. `text-emerald-700` reads as deliberate and is not: it survives a
+rebrand only by being found and replaced one at a time, and it cannot carry
+meaning. `text-income` states what the colour _is for_, so the meaning survives
+the value changing.
+
+The `dark:` part is the larger win. Roles resolve through variables, so the same
+component class is correct in both schemes. A `dark:` variant doubles every
+colour decision in the codebase and introduces a class of bug that passes review
+and shows up only on a user's phone — the dark-mode half of a card is the half
+nobody looks at.
+
+**Consequence:** Adding a colour means adding a role to `globals.css` in both
+schemes, not adding a palette class to a component. `src/lib/tone.ts` derives
+the six categorical hues from a name so a user-defined category keeps its colour
+across screens.
+
+---
+
+## ADR-028 — Bottom tab bar, because this is a phone app
+
+**Status:** Accepted
+
+**Decision:** Primary navigation is a four-item bottom tab bar with a floating
+add action. From `md` up it moves into the header. `viewportFit: 'cover'` with
+`env(safe-area-inset-bottom)`.
+
+**Reason:** TakaKori is used one-handed, on a metered connection, in a hurry.
+Top navigation puts every destination one row deep, which on a 390px screen
+means a scrolling or illegible header. The bottom of the screen is where the
+thumb already is.
+
+Four tabs is a ceiling, not a starting point: Home, Transactions, Analytics,
+Account. Categories, budgets and recurring live under Account, whose job is
+"everything about you and your setup". Five or seven tabs is not more
+navigable, it is a menu with icons.
+
+The floating add button sits _above_ the bar rather than in it because posting
+a transaction is the one thing a user opens the app to do, and burying it in a
+row of peers makes it a target they have to aim at.
+
+**Consequence:** A new destination goes under Account, not onto the bar. The
+`safe-area-inset` padding is not optional — without it the home indicator sits on
+the last row of a list, in exactly the situation the app is designed for.
+
+---
+
+## ADR-026 — Hand-rolled icons and CSS charts, for bundle size
+
+**Status:** Accepted
+
+**Decision:** `src/components/ui/Icon.tsx` is the entire icon set (~30 glyphs,
+~2 KB). `src/components/reports/Charts.tsx` is CSS and SVG. Neither has a
+dependency.
+
+**Reason:** This app targets users on metered connections. A charting library is
+roughly 100 KB of client JavaScript to draw two bar series whose underlying data
+is already a table. An icon package is a smaller cost but arrives with its own
+bundler assumptions, and the twenty-odd glyphs needed here are twenty-odd
+`<path>` elements.
+
+This is a reversible decision with an obvious reversal point: one file each. If
+the reports ever need genuine time-series or scatter charts, replace
+`Charts.tsx` and the argument no longer holds.
+
+**Consequence:** Adding an icon means drawing it on a 24×24 grid and adding it
+to `PATHS`. Adding a chart type goes in `Charts.tsx`. Reaching for a package
+first is the wrong instinct in this codebase.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted

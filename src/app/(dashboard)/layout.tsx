@@ -1,51 +1,67 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { signOut } from '@/app/(auth)/actions'
+import { BottomNav, HeaderNav } from '@/components/ui/NavBar'
+import { Logo } from '@/components/ui/Logo'
+import { Icon } from '@/components/ui/Icon'
 
+/**
+ * The authenticated shell.
+ *
+ * Mobile-first, in this order and not the other way round: the app bar carries
+ * identity and sign-out, the bottom bar carries navigation, and the content
+ * column is one narrow column that widens into a grid at larger breakpoints.
+ *
+ * `tk-wash` is the brand gradient. It sits behind the top of *every* screen, so
+ * moving between tabs shows one continuous surface rather than a header that
+ * re-declares itself on each route.
+ *
+ * Sign-out is a plain `<form action={signOut}>`: it must work with JavaScript
+ * unavailable, on a metered connection, in a PWA that has been backgrounded.
+ */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { email } = await requireUser()
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-neutral-200">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <nav className="flex items-center gap-4">
-            <Link href="/dashboard" className="font-semibold">
-              TakaKori
-            </Link>
-            <Link href="/transactions" className="text-sm text-neutral-600 hover:text-black">
-              Transactions
-            </Link>
-            <Link href="/accounts" className="text-sm text-neutral-600 hover:text-black">
-              Accounts
-            </Link>
-            <Link href="/categories" className="text-sm text-neutral-600 hover:text-black">
-              Categories
-            </Link>
-            <Link href="/reports" className="text-sm text-neutral-600 hover:text-black">
-              Reports
-            </Link>
-            <Link href="/budgets" className="text-sm text-neutral-600 hover:text-black">
-              Budgets
-            </Link>
-            <Link href="/recurring" className="text-sm text-neutral-600 hover:text-black">
-              Recurring
-            </Link>
-          </nav>
+    <div className="relative min-h-dvh">
+      <div className="tk-wash" aria-hidden="true" />
 
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-neutral-500 sm:inline">{email}</span>
-            {/* A plain form keeps sign-out working without client JavaScript. */}
+      <a href="#main" className="tk-skip">
+        Skip to content
+      </a>
+
+      <header className="relative">
+        <div className="tk-shell flex items-center gap-3 py-4">
+          <Link href="/dashboard" className="shrink-0" aria-label="TakaKori home">
+            <Logo size={34} />
+          </Link>
+
+          <div className="ml-auto flex items-center gap-2">
+            <HeaderNav />
+            {email && (
+              <span className="tk-caption hidden max-w-[18ch] truncate lg:inline">{email}</span>
+            )}
             <form action={signOut}>
-              <button type="submit" className="text-sm underline">
-                Sign out
+              <button
+                type="submit"
+                className="tk-btn tk-btn-ghost tk-btn-sm"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <Icon name="logout" size={17} />
+                <span className="hidden sm:inline">Sign out</span>
               </button>
             </form>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
+      {/* Clearance for the fixed tab bar plus the home indicator on a phone. */}
+      <main id="main" className="tk-shell relative pb-32 md:pb-12">
+        {children}
+      </main>
+
+      <BottomNav />
     </div>
   )
 }

@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Alert } from '@/components/ui/Alert'
+import { PasswordField } from '@/components/ui/Field'
+import { buttonClass } from '@/components/ui/button'
 
 /**
  * Password reset form.
@@ -55,50 +58,34 @@ export function ResetPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h2 className="text-lg font-medium">Set a new password</h2>
+      <div>
+        <h1 className="tk-title">Set a new password</h1>
+        <p className="tk-caption mt-1.5">Then you will be signed in.</p>
+      </div>
 
-      {status === 'error' && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {message}
-        </p>
-      )}
-      {status === 'done' && (
-        <p className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-700">
-          {message}
-        </p>
-      )}
+      {status === 'error' && <Alert tone="error">{message}</Alert>}
+      {status === 'done' && <Alert tone="success">{message}</Alert>}
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span>New password</span>
-        <input
-          type="password"
-          name="password"
-          autoComplete="new-password"
-          minLength={8}
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        />
-      </label>
+      <PasswordField
+        name="password"
+        label="New password"
+        autoComplete="new-password"
+        minLength={8}
+        required
+      />
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span>Confirm password</span>
-        <input
-          type="password"
-          name="confirm"
-          autoComplete="new-password"
-          minLength={8}
-          required
-          className="rounded border border-neutral-300 px-3 py-2"
-        />
-      </label>
+      <PasswordField
+        name="confirm"
+        label="Confirm password"
+        autoComplete="new-password"
+        minLength={8}
+        required
+      />
 
       <button
         type="submit"
         disabled={status === 'busy'}
-        className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
+        className={buttonClass('primary', { block: true })}
       >
         {status === 'busy' ? 'Saving…' : 'Update password'}
       </button>

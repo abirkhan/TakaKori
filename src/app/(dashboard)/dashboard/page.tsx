@@ -1,10 +1,23 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { formatMinor, toMinor } from '@/lib/money'
-import { resolveRange, todayIn } from '@/lib/dates'
+import {
+  resolveRange,
+  todayIn,
+  addDaysTo,
+  startOfMonthOffset,
+  formatDayLabel,
+  monthLabel,
+} from '@/lib/dates'
 import { listTransactions } from '@/lib/queries/transactions'
 import { getAccountBalances, getTotalsForRange } from '@/lib/queries/reference'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { StatTile } from '@/components/ui/StatTile'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Row, RowLink } from '@/components/ui/Row'
+import { Icon } from '@/components/ui/Icon'
+import { amountClass, amountSign } from '@/components/ui/button'
 
 export default async function DashboardPage() {
   // Authorisation. The proxy already redirects unauthenticated users, but a
@@ -21,6 +34,7 @@ export default async function DashboardPage() {
   // All ranges are resolved in the user's timezone, never UTC.
   const timezone = profile?.timezone ?? 'Asia/Dhaka'
   const currency = profile?.currency ?? 'BDT'
+  const today = todayIn(timezone)
   const month = resolveRange('month', timezone)
 
   if (!month) {
@@ -28,12 +42,21 @@ export default async function DashboardPage() {
     throw new Error('Failed to resolve the current month range')
   }
 
+  // The previous calendar month, for a like-for-like comparison. Both
+  // boundaries come from the same helpers that resolved the current month,
+  // rather than from a second month-arithmetic path written inline here.
+  const previousMonth = {
+    from: startOfMonthOffset(today, 1),
+    to: addDaysTo(month.from, -1, timezone),
+  }
+
   // Month figures come from a SQL aggregate scoped to the range. Summing the
   // lifetime view here would mislabel every number on this page.
-  const [recent, balances, monthTotals] = await Promise.all([
-    listTransactions({ limit: 8 }),
+  const [recent, balances, monthTotals, previousTotals] = await Promise.all([
+    listTransactions({ limit: 6 }),
     getAccountBalances(),
     getTotalsForRange(month),
+    getTotalsForRange(previousMonth),
   ])
 
   const monthIncome = toMinor(monthTotals?.total_income ?? 0)
@@ -41,124 +64,191 @@ export default async function DashboardPage() {
   const monthNet = toMinor(monthTotals?.net_balance ?? 0)
   const totalBalance = balances.reduce((sum, b) => sum + toMinor(b.balance), 0)
 
+  // Percentage change against the same month a month ago. Null rather than zero
+  // when there is nothing to compare against: "0% change" against a previous
+  // month with no spending is a claim, and it is a false one.
+  const previousExpense = toMinor(previousTotals?.total_expense ?? 0)
+  const changePercent =
+    previousExpense > 0
+      ? Math.round(((monthExpense - previousExpense) / previousExpense) * 100)
+      : null
+
+  const money = (minor: number) => formatMinor(minor, { currency })
+
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {profile?.full_name ? `Hello, ${profile.full_name}` : 'Dashboard'}
-        </h1>
-        <p className="text-sm text-neutral-500">{todayIn(timezone)}</p>
-      </div>
+    <div className="tk-stack">
+      <PageHeader
+        eyebrow={formatDayLabel(today, timezone)}
+        title={profile?.full_name ? `Hello, ${profile.full_name.split(' ')[0]}` : 'Dashboard'}
+      />
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded border border-neutral-200 p-4">
-          <p className="text-sm text-neutral-500">Total balance</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatMinor(totalBalance, { currency })}
-          </p>
-        </div>
+      {/* Two columns from `lg`. A single column stretched to 72rem puts a
+          transaction's amount 900px from its description, which reads worse than
+          the phone layout it replaced. The primary column stays the wider of the
+          two because the spending figures are what the screen is for. */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <div className="tk-stack">
+          {/* The headline is spending, not balance. Balance answers "do I have
+              money"; spend answers "am I okay", which is the question a user
+              opens a tracker to ask. */}
+          <section className="tk-card">
+            <p className="tk-eyebrow">Spent in {monthLabel(month.from)}</p>
+            <p className="tk-money-lg mt-1.5">{money(monthExpense)}</p>
 
-        <div className="rounded border border-neutral-200 p-4">
-          <p className="text-sm text-neutral-500">This month — income</p>
-          <p className="mt-1 text-2xl font-semibold text-emerald-700 tabular-nums">
-            {formatMinor(monthIncome, { currency })}
-          </p>
-        </div>
-
-        <div className="rounded border border-neutral-200 p-4">
-          <p className="text-sm text-neutral-500">This month — expense</p>
-          <p className="mt-1 text-2xl font-semibold text-red-700 tabular-nums">
-            {formatMinor(monthExpense, { currency })}
-          </p>
-        </div>
-      </section>
-
-      <section className="rounded border border-neutral-200 p-4">
-        <p className="text-sm text-neutral-500">
-          Saved this month ({month.from} to {month.to})
-        </p>
-        <p className="mt-1 text-lg font-medium tabular-nums">
-          {formatMinor(monthNet, { currency })}
-        </p>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Recent transactions</h2>
-          <Link href="/transactions" className="text-sm underline">
-            View all
-          </Link>
-        </div>
-
-        {recent.length === 0 ? (
-          <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500">
-            No transactions yet.{' '}
-            <Link href="/transactions" className="underline">
-              Add your first one
-            </Link>
-            .
-          </p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-neutral-500">
-                <th className="py-2 font-normal">Date</th>
-                <th className="py-2 font-normal">Description</th>
-                <th className="py-2 font-normal">Category</th>
-                <th className="py-2 text-right font-normal">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id} className="border-b border-neutral-100">
-                  <td className="py-2 whitespace-nowrap text-neutral-600">{t.occurred_on}</td>
-                  <td className="py-2">
-                    {t.description ?? (
-                      <span className="text-neutral-400">
-                        {t.type === 'transfer' ? 'Transfer' : (t.category?.name ?? 'Uncategorised')}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 text-neutral-600">
-                    {t.type === 'transfer' ? 'Transfer' : (t.category?.name ?? '—')}
-                  </td>
-                  <td
-                    className={`py-2 text-right font-medium tabular-nums ${
-                      t.type === 'income'
-                        ? 'text-emerald-700'
-                        : t.type === 'expense'
-                          ? 'text-red-700'
-                          : 'text-neutral-500'
-                    }`}
-                  >
-                    {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}
-                    {formatMinor(toMinor(t.amount), { currency, withSymbol: false })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {balances.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-medium">Accounts</h2>
-          <ul className="flex flex-col gap-2">
-            {balances.map((b) => (
-              <li
-                key={b.account_id}
-                className="flex items-center justify-between rounded border border-neutral-200 px-4 py-3 text-sm"
-              >
-                <span>{b.name}</span>
-                <span className="font-medium tabular-nums">
-                  {formatMinor(toMinor(b.balance), { currency })}
+            {changePercent !== null ? (
+              <p className="mt-2">
+                <span
+                  className={`tk-badge ${changePercent <= 0 ? 'tk-badge-income' : 'tk-badge-expense'}`}
+                >
+                  <Icon name={changePercent <= 0 ? 'arrowDownLeft' : 'arrowUpRight'} size={12} />
+                  {Math.abs(changePercent)}% {changePercent <= 0 ? 'below' : 'above'} last month
                 </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+              </p>
+            ) : (
+              <p className="tk-caption mt-2">No spending recorded last month.</p>
+            )}
+
+            <div className="tk-divider my-4" />
+
+            <div className="tk-card-flat">
+              <p className="tk-eyebrow">Total balance</p>
+              <p className="tk-money mt-1" data-balance>
+                {money(totalBalance)}
+              </p>
+              <p className="tk-caption mt-1">
+                Across {balances.length} account{balances.length === 1 ? '' : 's'}
+              </p>
+            </div>
+          </section>
+
+          <section className="tk-card">
+            <div className="flex items-start gap-3 sm:gap-5">
+              <StatTile
+                icon="arrowDownLeft"
+                tone="brand"
+                label="Income"
+                value={money(monthIncome)}
+              />
+              <StatTile
+                icon="arrowUpRight"
+                tone="rose"
+                label="Expenses"
+                value={money(monthExpense)}
+              />
+              <StatTile
+                icon={monthNet >= 0 ? 'wallet' : 'alert'}
+                tone={monthNet >= 0 ? 'teal' : 'amber'}
+                label="Saved"
+                value={money(monthNet)}
+              />
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <h2 className="tk-section">Recent transactions</h2>
+              <Link href="/transactions" className="tk-caption text-accent font-medium">
+                See all
+              </Link>
+            </div>
+
+            {recent.length === 0 ? (
+              <EmptyState
+                icon="receipt"
+                title="Nothing recorded yet"
+                description="Add your first expense or payment and it will appear here."
+                action={
+                  <Link href="/transactions#add" className="tk-btn tk-btn-soft tk-btn-sm mt-1">
+                    <Icon name="plus" size={16} />
+                    Add a transaction
+                  </Link>
+                }
+              />
+            ) : (
+              <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+                {recent.map((t) => (
+                  <li key={t.id}>
+                    <Row
+                      icon={
+                        t.type === 'transfer'
+                          ? 'repeat'
+                          : t.type === 'income'
+                            ? 'arrowDownLeft'
+                            : 'arrowUpRight'
+                      }
+                      tone={t.type === 'income' ? 'brand' : t.type === 'transfer' ? 'sky' : 'rose'}
+                      title={t.description ?? t.category?.name ?? 'Transfer'}
+                      subtitle={`${t.occurred_on} Â· ${t.account?.name ?? 'No account'}`}
+                      trailing={
+                        <span className={amountClass(t.type)}>
+                          {amountSign(t.type)}
+                          {formatMinor(toMinor(t.amount), { currency, withSymbol: false })}
+                        </span>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="tk-stack">
+          {balances.length > 0 && (
+            <section>
+              <h2 className="tk-section mb-3">Accounts</h2>
+              <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+                {balances.map((b) => (
+                  <li key={b.account_id}>
+                    <Row
+                      title={b.name}
+                      titleAttribute={b.name}
+                      subtitle={b.kind.replace('_', ' ')}
+                      trailing={<span className="tk-amount">{money(toMinor(b.balance))}</span>}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Everything that is not a top-level tab still needs a home, and "set
+              something up" belongs in one place rather than in a header menu. */}
+          <section>
+            <h2 className="tk-section mb-3">Plan</h2>
+            <div className="tk-card divide-hairline flex flex-col divide-y p-1">
+              <RowLink
+                href="/budgets"
+                icon="target"
+                tone="amber"
+                title="Budgets"
+                subtitle="Monthly limits and pace"
+              />
+              <RowLink
+                href="/recurring"
+                icon="repeat"
+                tone="violet"
+                title="Recurring"
+                subtitle="Rent, salary, subscriptions"
+              />
+              <RowLink
+                href="/categories"
+                icon="tag"
+                tone="teal"
+                title="Categories"
+                subtitle="How your spending is labelled"
+              />
+              <RowLink
+                href="/reports"
+                icon="chart"
+                tone="sky"
+                title="Reports"
+                subtitle="Trends and breakdowns"
+              />
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

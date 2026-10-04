@@ -1,56 +1,51 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { createCategoryAction, type ActionState } from '@/actions/transactions'
+import { Alert } from '@/components/ui/Alert'
+import { SegmentedControl } from '@/components/ui/SegmentedControl'
+import { TextField } from '@/components/ui/Field'
+import { buttonClass } from '@/components/ui/button'
 
 export function CategoryForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
     createCategoryAction,
     {},
   )
+  const [type, setType] = useState<'expense' | 'income'>('expense')
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
-      <h2 className="text-lg font-medium">Add category</h2>
+      <div>
+        <h2 className="tk-section">Add category</h2>
+        <p className="tk-caption mt-1">Categories decide how your spending is grouped.</p>
+      </div>
 
-      {state.error && (
-        <p
-          role="alert"
-          className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-          {state.error}
-        </p>
-      )}
+      {state.error && <Alert tone="error">{state.error}</Alert>}
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span>Name</span>
-          <input
-            type="text"
-            name="name"
-            maxLength={50}
-            required
-            className="rounded border border-neutral-300 px-3 py-2"
-          />
-          {state.fieldErrors?.name && (
-            <span className="text-xs text-red-600">{state.fieldErrors.name}</span>
-          )}
-        </label>
+      <div className="grid gap-4 sm:grid-cols-[1fr_14rem_auto] sm:items-end">
+        <TextField
+          name="name"
+          label="Name"
+          maxLength={50}
+          required
+          placeholder="Groceries, Rent, Transport…"
+          error={state.fieldErrors?.name}
+        />
 
-        <label className="flex flex-1 flex-col gap-1 text-sm">
-          <span>Type</span>
-          <select name="type" className="rounded border border-neutral-300 px-3 py-2">
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-          </select>
-        </label>
+        <SegmentedControl
+          name="type"
+          ariaLabel="Type"
+          value={type}
+          onChange={setType}
+          options={[
+            { value: 'expense', label: 'Expense' },
+            { value: 'income', label: 'Income' },
+          ]}
+        />
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-        >
-          {pending ? 'Saving…' : 'Add category'}
+        <button type="submit" disabled={pending} className={buttonClass('soft')}>
+          {pending ? 'Saving…' : 'Add'}
         </button>
       </div>
     </form>
