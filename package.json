@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node scripts/diag.mjs",
+    "postbuild": "npm run typecheck && npm run lint && npm run test",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

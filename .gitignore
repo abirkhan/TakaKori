@@ -47,5 +47,3 @@ tsconfig.tsbuildinfo
 # Playwright MCP debug artifacts
 /.playwright-mcp
 
-# temporary build diagnostic
-/public/__diag.txt
