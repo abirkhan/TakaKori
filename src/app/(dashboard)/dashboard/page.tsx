@@ -85,8 +85,16 @@ export default async function DashboardPage() {
       {/* Two columns from `lg`. A single column stretched to 72rem puts a
           transaction's amount 900px from its description, which reads worse than
           the phone layout it replaced. The primary column stays the wider of the
-          two because the spending figures are what the screen is for. */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
+          two because the spending figures are what the screen is for.
+
+          `grid-cols-1` is load-bearing rather than a default. With no explicit
+          column definition the implicit track is `auto`, which is floored at its
+          content's min-content width — and a transaction row's min-content is
+          ~430px, because the nowrap amount and the truncating title cannot
+          shrink past it. On a 390px phone that made the whole page 459px wide
+          and scrollable sideways. `minmax(0, 1fr)` lets the track shrink below
+          its content, which is what makes the truncation inside the rows work. */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
         <div className="tk-stack">
           {/* The headline is spending, not balance. Balance answers "do I have
               money"; spend answers "am I okay", which is the question a user

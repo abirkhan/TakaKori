@@ -13,18 +13,68 @@ import { Icon, type IconName } from './Icon'
  * `subtitle` is where a date or a category goes, and it must be the second
  * line: on a phone the eye reads tile → title → amount, and anything that
  * competes with the title for that second line loses.
+ *
+ * `RowContents` is separated from the box because `RowLink` needs the same
+ * children inside a link, and nesting one `.tk-row` inside another gave the
+ * inner flex container `min-width: auto` — it refused to shrink below its own
+ * min-content width (306px) and pushed the page sideways on a 320px screen.
+ * One flex row per row, not two.
  */
-export function Row({
+
+/** The children of a row, without the box. Shared by `Row` and `RowLink`. */
+function RowContents({
   icon,
-  tone = 'brand',
+  tone,
   title,
   subtitle,
   trailing,
   showChevron,
   titleAttribute,
   children,
-  className = '',
 }: {
+  icon?: IconName
+  tone: 'brand' | 'sky' | 'amber' | 'rose' | 'violet' | 'teal'
+  title: ReactNode
+  subtitle?: ReactNode
+  trailing?: ReactNode
+  showChevron?: boolean
+  titleAttribute?: string
+  children?: ReactNode
+}) {
+  return (
+    <>
+      {icon && (
+        <span className={`tk-tile tk-tone-${tone}`}>
+          <Icon name={icon} size={18} />
+        </span>
+      )}
+
+      {/* `min-w-0` is what allows the truncating children to actually truncate:
+          a flex item defaults to `min-width: auto`, which floors it at the
+          longest word rather than letting it shrink. */}
+      <div className="min-w-0 flex-1">
+        <p className="tk-body truncate font-medium" data-row-title={titleAttribute}>
+          {title}
+        </p>
+        {subtitle && <p className="tk-caption mt-0.5 truncate">{subtitle}</p>}
+        {children}
+      </div>
+
+      {trailing && (
+        <div className="shrink-0 text-right" data-row-trailing>
+          {trailing}
+        </div>
+      )}
+      {showChevron && (
+        <span className="text-subtle shrink-0" aria-hidden="true">
+          <Icon name="chevronRight" size={18} />
+        </span>
+      )}
+    </>
+  )
+}
+
+export function Row(props: {
   icon?: IconName
   tone?: 'brand' | 'sky' | 'amber' | 'rose' | 'violet' | 'teal'
   title: ReactNode
@@ -50,32 +100,31 @@ export function Row({
   children?: ReactNode
   className?: string
 }) {
+  const {
+    icon,
+    tone = 'brand',
+    title,
+    subtitle,
+    trailing,
+    showChevron,
+    titleAttribute,
+    children,
+    className = '',
+  } = props
+
   return (
     <div className={`tk-row ${className}`}>
-      {icon && (
-        <span className={`tk-tile tk-tone-${tone}`}>
-          <Icon name={icon} size={18} />
-        </span>
-      )}
-
-      <div className="min-w-0 flex-1">
-        <p className="tk-body truncate font-medium" data-row-title={titleAttribute}>
-          {title}
-        </p>
-        {subtitle && <p className="tk-caption mt-0.5 truncate">{subtitle}</p>}
+      <RowContents
+        icon={icon}
+        tone={tone}
+        title={title}
+        subtitle={subtitle}
+        trailing={trailing}
+        showChevron={showChevron}
+        titleAttribute={titleAttribute}
+      >
         {children}
-      </div>
-
-      {trailing && (
-        <div className="shrink-0 text-right" data-row-trailing>
-          {trailing}
-        </div>
-      )}
-      {showChevron && (
-        <span className="text-subtle shrink-0" aria-hidden="true">
-          <Icon name="chevronRight" size={18} />
-        </span>
-      )}
+      </RowContents>
     </div>
   )
 }
@@ -117,7 +166,7 @@ export function RowLink({
       aria-label={linkLabel}
       className="tk-row rounded-field -mx-1 px-1 transition-opacity active:opacity-70"
     >
-      <Row
+      <RowContents
         icon={icon}
         tone={tone}
         title={title}

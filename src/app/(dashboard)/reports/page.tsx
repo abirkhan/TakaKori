@@ -107,8 +107,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Para
       {/* The period is a segmented control of links rather than a select: it is
           the one control a user on this screen changes constantly, and four
           options should not cost a dropdown to reveal. Links keep it
-          server-driven, so the range stays resolved in the user's timezone. */}
-      <nav aria-label="Period" className="tk-segment">
+          server-driven, so the range stays resolved in the user's timezone.
+
+          `tk-segment-scroll` rather than `tk-segment`, because four options with
+          these labels do not fit a 320px screen — the narrowest still shipping —
+          and a control that overflows its card is worse than one that scrolls. */}
+      <nav aria-label="Period" className="tk-segment-scroll">
         {PERIODS.map((p) => (
           <Link
             key={p.value}

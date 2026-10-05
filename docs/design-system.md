@@ -204,7 +204,59 @@ main column's bottom padding. Without both, the home indicator sits on top of
 the last row of a list and the app looks broken in exactly the situation it was
 designed for.
 
-### 5.3 Rhythm
+### 5.3 No field renders under 16px
+
+**The most important rule on this page, and the least visible in review.**
+
+iOS Safari zooms the _page_ in whenever a focused field computes under 16px, and
+it does not zoom back out when focus leaves. What you get is a permanently
+zoomed viewport: the fixed tab bar is sized against the visual viewport rather
+than the layout one, so it sits over the content, and a layout built for 390px
+is being read at an effective ~300px with a horizontal scrollbar. It looks
+exactly like a broken bottom nav.
+
+Three separate causes shipped here before it was found, so it is enforced by a
+test rather than by convention:
+
+| Element            | Was  | Cause                                                                                   |
+| ------------------ | ---- | --------------------------------------------------------------------------------------- |
+| `.tk-field`        | 15px | Set to match the 13px label rhythm                                                      |
+| `input[type=date]` | 15px | Same                                                                                    |
+| `input.sr-only`    | 14px | Inherited from the label — a keyboard user tabbing to the type selector zoomed the page |
+
+`maximumScale: 1` is set in the viewport export, but it **does not prevent this
+on iOS** — Safari has ignored `user-scalable=no` since iOS 10. Field size is the
+only thing that works there.
+
+Disabling pinch-zoom is a WCAG 1.4.4 failure. It is accepted because a zoomed
+state of this layout is genuinely unusable and there is no dense content that
+benefits from zooming, but it should be revisited if the app ever gains
+long-form reading or a data table.
+
+### 5.4 Horizontal overflow is a bug, not a layout choice
+
+`documentElement.scrollWidth` must equal `clientWidth` on every screen. A page
+that pans sideways is broken, and it is invisible in code review.
+
+Four distinct causes appeared here, each of which looked correct in isolation:
+
+- **A grid track with no explicit columns.** The implicit track is `auto`, floored
+  at its content's min-content width. A transaction row's min-content is ~430px,
+  so a 390px phone got a 459px-wide page. Use `grid-cols-1` or `minmax(0, 1fr)`.
+- **`sr-only` inside a scroll container.** `sr-only` is `position: absolute`, so
+  with no positioned ancestor its containing block is the _viewport_: the hidden
+  radios landed past the right edge and widened the document even though the
+  segment itself scrolled correctly. The scroll container needs
+  `position: relative`.
+- **Nested flex rows.** A `.tk-row` inside a `.tk-row` gives the inner one
+  `min-width: auto`, so it refuses to shrink below its own min-content. One flex
+  row per row — `RowContents` exists for exactly this.
+- **Too many options for a fixed segment.** Four or more labels do not fit 320px;
+  use `.tk-segment-scroll` rather than letting the control overflow its card.
+
+`e2e/layout.spec.ts` asserts all of this at 320/360/390/412px.
+
+### 5.5 Rhythm
 
 `.tk-stack` for 20px between blocks, `.tk-stack-tight` for 12px between related
 items, `.tk-shell` for the 20/24px side gutters and the three column widths

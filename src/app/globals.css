@@ -232,11 +232,12 @@
   }
 
   /* iOS renders a date input at 22px unless told otherwise, which breaks the
-     rhythm of a 14px field label next to it. */
+     rhythm of a 14px field label next to it. Kept at 1rem for the same
+     auto-zoom reason as `.tk-field`. */
   input[type='date'],
   input[type='time'] {
     min-height: 2.75rem;
-    font-size: 0.9375rem;
+    font-size: 1rem;
   }
 }
 
@@ -533,7 +534,15 @@
     border: 1px solid var(--hairline);
     background-color: var(--surface);
     padding-inline: 0.9375rem;
-    font-size: 0.9375rem;
+    /* 16px, not 15px, and not an em or rem that can shrink below it.
+       iOS Safari zooms the *page* in whenever a focused field's computed
+       font-size is under 16px, and it does not zoom back out when the field
+       loses focus. On a form-heavy screen that leaves the user permanently
+       zoomed into a layout built for a wider viewport: the bottom tab bar is
+       sized to the visual viewport, so it sits under the content and the whole
+       page gains a horizontal scrollbar. Setting `maximum-scale` does not
+       prevent this — iOS ignores it — so the field size is the actual fix. */
+    font-size: 1rem;
     color: var(--content);
     transition: border-color 0.15s var(--ease-brand);
   }
@@ -598,7 +607,11 @@
      options that the user switches between constantly (income / expense /
      transfer, month / quarter / year). Same pattern on every screen. */
 
+  /* `position: relative` for the same reason as `.tk-segment-scroll` below: the
+     `sr-only` radios inside need a positioned ancestor or they resolve against
+     the viewport and widen the document. */
   .tk-segment {
+    position: relative;
     display: inline-flex;
     width: 100%;
     padding: 0.25rem;
@@ -610,8 +623,17 @@
   /* A segment with more than three options cannot fit at 390px — the labels
      need roughly 90px each. Rather than shrinking them to unreadable or
      truncating them, the row scrolls horizontally and snaps. Each item keeps its
-     intrinsic width, so "This month" stays a whole label. */
+     intrinsic width, so "This month" stays a whole label.
+
+     `position: relative` is load-bearing, not decoration. `SegmentedControl`
+     hides each radio with `sr-only`, which is `position: absolute`. Without a
+     positioned ancestor, an absolutely positioned box takes the *viewport* as
+     its containing block: the inputs landed past the right edge and widened
+     `documentElement.scrollWidth`, giving the whole page a horizontal scrollbar
+     even though the segment itself scrolled correctly. Making this box the
+     containing block puts them back inside the thing that scrolls them. */
   .tk-segment-scroll {
+    position: relative;
     display: flex;
     width: 100%;
     gap: 0.25rem;
@@ -626,6 +648,14 @@
   .tk-segment-scroll > * {
     scroll-snap-align: start;
     flex: 0 0 auto;
+  }
+
+  /* The scroll variant has no pill background — a background on a horizontally
+     scrolling box scrolls with its content and leaves a gap at the trailing
+     edge. Each item carries its own active pill instead, which is also what
+     makes the active option visible while it is scrolled to. */
+  .tk-segment-scroll > .tk-segment-item {
+    background-color: var(--sunken);
   }
 
   .tk-segment-item {
@@ -654,6 +684,14 @@
     background-color: var(--surface);
     color: var(--accent);
     box-shadow: var(--shadow-card);
+  }
+
+  /* In the scroll variant the inactive fill is `--sunken`, so an active item
+     needs the explicit surface override to stay distinguishable from its
+     neighbours — the specificity of the bare `.tk-segment-scroll >` rule above
+     would otherwise win. */
+  .tk-segment-scroll > .tk-segment-item[data-active='true'] {
+    background-color: var(--surface);
   }
 
   /* --- Chips ------------------------------------------------------------ */
@@ -844,6 +882,16 @@
     border: 1.5px dashed var(--hairline);
     padding: 2rem 1.25rem;
     text-align: center;
+  }
+
+  /* A visually hidden radio still has to clear the iOS zoom threshold.
+     `sr-only` renders at the inherited 14px label size, and iOS zooms the page
+     on focus of any field under 16px — including one the user can never see.
+     A keyboard user tabbing to the type selector was zooming the page. It is
+     hidden, so its font size cannot affect legibility; it only has to be large
+     enough not to trigger the browser. */
+  input.sr-only {
+    font-size: 1rem;
   }
 
   /* --- Navigation ------------------------------------------------------- */

@@ -56,29 +56,38 @@ export default async function Home() {
             )}
           </div>
 
-          <section className="tk-card flex flex-col gap-1 p-2">
-            <RowLink
-              href="/reports"
-              icon="chart"
-              tone="sky"
-              title="See where it goes"
-              subtitle="Trends by month, by category, by account"
-            />
-            <RowLink
-              href="/budgets"
-              icon="target"
-              tone="amber"
-              title="Set a limit and watch the pace"
-              subtitle="A forecast for month end, not just a spent figure"
-            />
-            <RowLink
-              href="/recurring"
-              icon="repeat"
-              tone="violet"
-              title="Catch rent and subscriptions"
-              subtitle="Predicted dates, posted by you"
-            />
-          </section>
+          {/* `tk-stack-tight` rather than a plain card: on a 320px screen the
+              three rows cannot share a card's horizontal padding without the
+              row's own min-content width pushing the page sideways. */}
+          <div className="tk-stack-tight">
+            <div className="tk-card p-2">
+              <RowLink
+                href="/reports"
+                icon="chart"
+                tone="sky"
+                title="See where it goes"
+                subtitle="Trends by month, category and account"
+              />
+            </div>
+            <div className="tk-card p-2">
+              <RowLink
+                href="/budgets"
+                icon="target"
+                tone="amber"
+                title="Set a limit, watch the pace"
+                subtitle="A forecast for month end, not a spent figure"
+              />
+            </div>
+            <div className="tk-card p-2">
+              <RowLink
+                href="/recurring"
+                icon="repeat"
+                tone="violet"
+                title="Catch rent and subscriptions"
+                subtitle="Predicted dates, posted by you"
+              />
+            </div>
+          </div>
 
           <p className="tk-caption max-w-md">
             Figures are stored as exact decimals and formatted as {formatMinor(12500000)} — lakh

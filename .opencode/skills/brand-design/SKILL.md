@@ -36,12 +36,26 @@ generic, which is worse than looking broken because it is hard to see why.
 6. **Minimum 48px tap target.** `.tk-btn` is 48px. Anything smaller is `.tk-btn-sm`
    and needs a reason.
 
-7. **Compose from the ten primitives** in `src/components/ui/`. Do not invent a
+7. **Never let a field compute under 16px.** iOS zooms the page in on focus and
+   never zooms back out, which leaves the fixed tab bar sitting over the content
+   and the page scrollable sideways — it looks exactly like a broken bottom nav.
+   This includes `sr-only` inputs. `maximum-scale` does not prevent it; Safari
+   has ignored `user-scalable=no` since iOS 10.
+
+8. **Never introduce horizontal overflow.** `scrollWidth === clientWidth` on
+   every screen. The three ways this keeps happening: a grid track with no
+   explicit column (`auto` floors at min-content, and a row's min-content is
+   ~430px), a `.tk-row` nested inside a `.tk-row` (the inner flex item gets
+   `min-width: auto` and refuses to shrink), and four or more options in a
+   fixed `.tk-segment` (use `.tk-segment-scroll`).
+   `e2e/layout.spec.ts` fails on all three.
+
+9. **Compose from the ten primitives** in `src/components/ui/`. Do not invent a
    new card, row, field or icon. If the shape you need is genuinely missing, add
    it to the system — do not special-case it in one screen.
 
-8. **The tab bar has four tabs.** Home, Transactions, Analytics, Account. New
-   destinations go under Account, not onto the bar.
+10. **The tab bar has four tabs.** Home, Transactions, Analytics, Account. New
+    destinations go under Account, not onto the bar.
 
 ---
 
@@ -194,6 +208,8 @@ keeps its colour everywhere.
 - [ ] Transfers render neutral
 - [ ] Every coloured state also has a word or a shape
 - [ ] Tap targets ≥ 48px
+- [ ] No field computes under 16px, including `sr-only` ones
+- [ ] No horizontal overflow at 320px (`e2e/layout.spec.ts`)
 - [ ] `prefers-reduced-motion` respected (only via the shared `--ease-brand`
       and the `tk-*` transitions — do not add bespoke keyframes)
 - [ ] Dark mode legible: check every new surface against a dark background

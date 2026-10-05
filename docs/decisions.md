@@ -633,6 +633,55 @@ first is the wrong instinct in this codebase.
 
 ---
 
+## ADR-029 - No field under 16px, and no horizontal overflow
+
+**Status:** Accepted
+
+**Decision:** No `input`, `select` or `textarea` may compute under `16px`
+font-size, including visually hidden ones. `documentElement.scrollWidth` must
+equal `clientWidth` on every route. Zoom is pinned at 1 in the viewport export.
+Enforced by `e2e/layout.spec.ts` at 320/360/390/412px.
+
+**Reason:** This app shipped a layout that was correct at every width in a
+desktop browser and unusable on the phone it is actually used on. Four
+independent causes, each invisible in code review:
+
+1. **iOS auto-zoom.** Safari zooms the _page_ on focus of any field under 16px
+   and never zooms back out. The permanent result is a zoomed viewport: the
+   fixed tab bar is sized against the visual viewport rather than the layout
+   one, so it sits over the content, and a 390px layout is read at ~300px. It
+   presents as a broken bottom nav, which sends you looking at the nav.
+2. **A grid track with no explicit column.** The implicit track is `auto`,
+   floored at its content's min-content width. A transaction row's min-content
+   is ~430px — the amount is `nowrap` and the title is truncating — so a 390px
+   phone got a 459px-wide page.
+3. **`sr-only` inside a scroll container.** `sr-only` is `position: absolute`.
+   With no positioned ancestor its containing block is the _viewport_, so the
+   hidden radios landed past the right edge and widened the document even though
+   the segment scrolled correctly. This is the subtlest of the four: the control
+   under test was behaving properly and the invisible input was the cause.
+4. **Nested flex rows.** `RowLink` rendered a `.tk-row` inside a `.tk-row`. The
+   inner flex container inherited `min-width: auto`, which floors it at its own
+   min-content, so it could not shrink to fit its parent.
+
+Cause 3 is the argument for a test rather than a review checklist: no amount of
+reading `SegmentedControl` would have surfaced it, and it only appears at widths
+narrower than the window it was built in.
+
+**On disabling zoom:** `maximumScale: 1` is set, but Safari has ignored
+`user-scalable=no` since iOS 10, so it changes nothing there — it only controls
+double-tap zoom and Android/Chrome. Field size is the only thing that actually
+prevents the iOS behaviour. Disabling pinch-zoom is a WCAG 1.4.4 failure,
+accepted here because a zoomed state of this layout is genuinely unusable and no
+content benefits from zooming; it should be revisited if the app gains
+long-form reading or a data table.
+
+**Consequence:** Adding a field means checking its computed font-size, not its
+eyeballed one. Adding a list means checking it at 320px, not at the width of the
+window it was built in. Both are now assertions rather than habits.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted
