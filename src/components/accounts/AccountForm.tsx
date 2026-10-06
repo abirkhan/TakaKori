@@ -1,7 +1,9 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect, useId, useState } from 'react'
 import { createAccountAction, type ActionState } from '@/actions/transactions'
+import { Modal } from '@/components/ui/Modal'
+import { useUrlSheet } from '@/components/ui/useUrlSheet'
 import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
@@ -13,38 +15,34 @@ const KINDS = [
   { value: 'credit_card', label: 'Credit card' },
 ] as const
 
-/**
- * Add-account form.
- *
- * Three fields in one row on a desktop, stacked on a phone. Opening balance is
- * optional and defaults to zero because most people are adding an account that
- * already exists in the world, not opening a new one.
- */
-export function AccountForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    createAccountAction,
-    {},
-  )
+/** The fields, mounted only while the sheet is open. See `TransactionFields`. */
+function AccountFields({
+  formId,
+  action,
+  state,
+}: {
+  formId: string
+  action: (formData: FormData) => void
+  state: ActionState
+}) {
+  const [draft, setDraft] = useState({ name: '', openingBalance: '' })
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <div>
-        <h2 className="tk-section">Add account</h2>
-        <p className="tk-caption mt-1">One row per place you can hold or spend money.</p>
-      </div>
-
+    <form id={formId} action={action} className="flex flex-col gap-4">
       {state.error && <Alert tone="error">{state.error}</Alert>}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <TextField
-          name="name"
-          label="Name"
-          maxLength={80}
-          required
-          placeholder="Cash, Bank, bKash…"
-          error={state.fieldErrors?.name}
-        />
+      <TextField
+        name="name"
+        label="Name"
+        maxLength={80}
+        required
+        placeholder="Cash, Bank, bKash…"
+        value={draft.name}
+        onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+        error={state.fieldErrors?.name}
+      />
 
+      <div className="grid gap-4 sm:grid-cols-2">
         <SelectField name="kind" label="Type" defaultValue="cash">
           {KINDS.map((k) => (
             <option key={k.value} value={k.value}>
@@ -59,12 +57,56 @@ export function AccountForm() {
           inputMode="decimal"
           placeholder="0.00"
           className="tabular-nums"
+          value={draft.openingBalance}
+          onChange={(e) => setDraft((d) => ({ ...d, openingBalance: e.target.value }))}
         />
       </div>
-
-      <button type="submit" disabled={pending} className={buttonClass('soft')}>
-        {pending ? 'Saving…' : 'Add account'}
-      </button>
     </form>
+  )
+}
+
+/**
+ * Add-account sheet.
+ *
+ * A sheet for the same reason the transaction form is one: `/accounts` is a tab,
+ * and a form sitting in the middle of it made the tab promise three things at
+ * once — balances, a create form, and navigation to every other settings screen.
+ * With the form out of the way the screen is honestly "your accounts", which is
+ * what the tab label claims.
+ *
+ * Opening balance is optional and defaults to zero, because most people are
+ * adding an account that already exists rather than opening a new one.
+ */
+export function AccountForm() {
+  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+    createAccountAction,
+    {},
+  )
+  const { open, close } = useUrlSheet('account')
+  const formId = useId()
+
+  useEffect(() => {
+    if (state.success && open) close()
+  }, [state.success, open, close])
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Add account"
+      description="One row per place you can hold or spend money."
+      footer={
+        <>
+          <button type="button" onClick={close} className={buttonClass('quiet')}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} disabled={pending} className={buttonClass('primary')}>
+            {pending ? 'Saving…' : 'Add account'}
+          </button>
+        </>
+      }
+    >
+      {open && <AccountFields formId={formId} action={formAction} state={state} />}
+    </Modal>
   )
 }

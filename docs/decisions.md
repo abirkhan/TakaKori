@@ -682,6 +682,83 @@ window it was built in. Both are now assertions rather than habits.
 
 ---
 
+## ADR-030 - Create forms are sheets on native `<dialog>`, state in the URL
+
+**Status:** Accepted
+
+**Decision:** On a tab screen, a create form is a modal sheet and the list owns
+the screen. Sheets are built on `<dialog>` + `showModal()`. Sheet state is
+`?sheet=<name>` in the URL, not React state. Form fields are controlled, held in
+a component mounted only while the sheet is open. A row carries one action
+target, not two visible ones.
+
+**Reason:** Each clause exists because the alternative shipped a specific defect.
+
+**The create form.** `/transactions` is the second tab. A user tapping it to
+_see_ their spending was met by a six-field form occupying the entire first
+screenful — the screen's most-used list was unreachable without scrolling past
+the tool for using it. `/accounts` had the same shape, which made one screen
+promise balances, a create form, and navigation to every settings page while its
+tab label promised one thing.
+
+**`<dialog>`.** The things a modal must get right are behaviours, not styles:
+focus trapped and moved in, Escape to close, the page behind inert, and rendering
+above every `z-index` including the fixed tab bar. Reimplementing them is how
+modals look correct in a screenshot and are unusable with a keyboard. One
+consequence: never declare `display` on the dialog unconditionally — it overrides
+the UA's `dialog:not([open]) { display: none }`, and a closed sheet stays painted
+and keeps swallowing clicks. Scope it to `[open]`.
+
+**The URL.** Because the state is in the query string, the trigger can be a real
+`<Link>` that works before hydration, and the back button closes the sheet — which
+is what a user pressing back on a modal expects, and what almost no hand-rolled
+modal gets right. Closing _replaces_ rather than pushes, so dismissing does not
+leave an entry to press back through twice.
+
+**Controlled fields.** React resets an uncontrolled `<form>` when its action
+resolves, _including when the action fails_. So a server validation error wiped
+every field the user had filled in and left them retyping the form beside the
+message explaining what they got wrong. Holding the draft in a child that mounts
+only while the sheet is open makes remounting _be_ the reset — which avoids both
+a reset effect and a `setState` inside one.
+
+**One action target.** A row with visible Edit and Delete links carries two 44px
+hitboxes and runs ~40% taller, on every row of a fifty-row list, for actions a
+user runs rarely, with a mis-tap sitting in a list of financial records. A single
+`⋯` opens a two-option sheet; Delete then sits behind two deliberate taps, which is
+the right friction for something with no undo.
+
+**Consequence:** A new tab screen lists first and creates in a sheet. A new
+per-row action goes in `RowActionsSheet`, not on the row. Sheet behaviour is
+covered by `e2e/sheets.spec.ts`, including the inertness, Escape, back-button and
+closed-sheet-paints-nothing cases that a "let's hand-roll it lighter" change would
+otherwise regress silently.
+
+---
+
+## ADR-031 - Nav height and main clearance are one declaration
+
+**Status:** Accepted
+
+**Decision:** `--nav-height` and `--nav-clear` are declared together in
+`globals.css`; the tab bar is sized from `--nav-height` and `main`'s bottom
+padding is `var(--nav-clear)`.
+
+**Reason:** They were a literal `pb-32` (128px) and an implicit ~77px, and
+nothing in review could compare them. A measurement on a 390×844 screen found
+**113 focusable elements whose centre sat under the bar** — including the
+transaction form's own save button, which is how a form whose primary action was
+invisible got missed for as long as it did.
+
+Two numbers that must agree should be one declaration. The floating action moved
+to the bar's right edge at the same time: centred, it straddled the "Transactions"
+and "Analytics" labels and sat on top of two other targets.
+
+**Consequence:** Changing the bar's height changes its clearance automatically.
+A new screen does not compute bottom padding by hand.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted

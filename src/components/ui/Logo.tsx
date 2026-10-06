@@ -27,8 +27,12 @@ export function Logo({
   return (
     <span className={`flex items-center gap-2 ${className ?? ''}`} style={{ height: size }}>
       <Mark size={size} />
+      {/* `fontSize` is set from `size` directly, with no `em` multiplier. The
+          earlier `text-[1.05em]` compounded with this inline size, so the
+          wordmark rendered at 17.68px — a value no token produced, derived from
+          whatever size it happened to be nested in. */}
       <span
-        className="text-[1.05em] leading-none font-semibold tracking-[-0.03em]"
+        className="leading-none font-semibold tracking-[-0.03em]"
         style={{ fontSize: size * 0.52 }}
       >
         {/* `text-content`, not `text-ink-900`: a hard-coded ink step is the

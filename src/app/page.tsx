@@ -56,37 +56,31 @@ export default async function Home() {
             )}
           </div>
 
-          {/* `tk-stack-tight` rather than a plain card: on a 320px screen the
-              three rows cannot share a card's horizontal padding without the
-              row's own min-content width pushing the page sideways. */}
-          <div className="tk-stack-tight">
-            <div className="tk-card p-2">
-              <RowLink
-                href="/reports"
-                icon="chart"
-                tone="sky"
-                title="See where it goes"
-                subtitle="Trends by month, category and account"
-              />
-            </div>
-            <div className="tk-card p-2">
-              <RowLink
-                href="/budgets"
-                icon="target"
-                tone="amber"
-                title="Set a limit, watch the pace"
-                subtitle="A forecast for month end, not a spent figure"
-              />
-            </div>
-            <div className="tk-card p-2">
-              <RowLink
-                href="/recurring"
-                icon="repeat"
-                tone="violet"
-                title="Catch rent and subscriptions"
-                subtitle="Predicted dates, posted by you"
-              />
-            </div>
+          {/* One card, three rows. Rows carry their own 20px inset so the content lines
+              up with every card in the app while the dividers between them run
+              edge to edge. */}
+          <div className="tk-card tk-list divide-hairline flex flex-col divide-y">
+            <RowLink
+              href="/reports"
+              icon="chart"
+              tone="sky"
+              title="See where it goes"
+              subtitle="Trends by month, category and account"
+            />
+            <RowLink
+              href="/budgets"
+              icon="target"
+              tone="amber"
+              title="Set a limit, watch the pace"
+              subtitle="A forecast for month end, not a spent figure"
+            />
+            <RowLink
+              href="/recurring"
+              icon="repeat"
+              tone="violet"
+              title="Catch rent and subscriptions"
+              subtitle="Predicted dates, posted by you"
+            />
           </div>
 
           <p className="tk-caption max-w-md">

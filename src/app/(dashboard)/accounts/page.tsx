@@ -14,12 +14,14 @@ import { buttonClass } from '@/components/ui/button'
 /**
  * Accounts.
  *
- * Doubles as the account tab in the bottom bar, which makes it the one screen
- * that has to hold three things at once: the balances, the form that creates
- * them, and the links to everything else that is not a top-level tab. Sections
- * are ordered by how often they are needed â€” balances, then create, then
- * settings â€” rather than alphabetically or by an imagined information
- * hierarchy.
+ * Doubles as the account tab in the bottom bar, so it carries the balances and
+ * the links to everything that is not a top-level tab. The create form used to
+ * sit here too, which made one screen promise three unrelated things while the
+ * tab label promised one; it is a sheet now, opened from the header, and the
+ * screen is honestly "your accounts".
+ *
+ * Sections are ordered by how often they are needed — balances, then planning —
+ * rather than alphabetically or by an imagined information hierarchy.
  */
 export default async function AccountsPage() {
   const { userId } = await requireUser()
@@ -43,12 +45,15 @@ export default async function AccountsPage() {
   return (
     <div className="tk-stack">
       <PageHeader
-        eyebrow={profile?.full_name ?? undefined}
+        eyebrow="Your accounts and setup"
         title="Account"
         action={
-          <Link href="/dashboard" className={buttonClass('ghost', { size: 'sm' })}>
-            <Icon name="home" size={16} />
-            <span className="hidden sm:inline">Home</span>
+          // A `<Link>`, not a button: the sheet's open state is `?sheet=account`,
+          // so this stays a real link that works before hydration and can be
+          // copied or middle-clicked.
+          <Link href="/accounts?sheet=account" className={buttonClass('soft')}>
+            <Icon name="plus" size={17} />
+            Add account
           </Link>
         }
       />
@@ -81,7 +86,7 @@ export default async function AccountsPage() {
             description="Add the wallet, bank account or bKash number you actually spend from."
           />
         ) : (
-          <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+          <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
             {accounts.map((a) => (
               <li key={a.id}>
                 <Row
@@ -115,19 +120,15 @@ export default async function AccountsPage() {
           </ul>
         )}
 
-        <p className="tk-caption mt-2">
+        <p className="tk-caption mt-3">
           Balances include transfers in both directions. Moving money between your own accounts is
           neither income nor expense.
         </p>
       </section>
 
-      <section className="tk-card">
-        <AccountForm />
-      </section>
-
       <section>
-        <h2 className="tk-section mb-3">Manage</h2>
-        <div className="tk-card divide-hairline flex flex-col divide-y p-1">
+        <h2 className="tk-section mb-3">Plan and organise</h2>
+        <div className="tk-card tk-list divide-hairline flex flex-col divide-y">
           <RowLink
             href="/budgets"
             icon="target"
@@ -158,6 +159,10 @@ export default async function AccountsPage() {
           />
         </div>
       </section>
+
+      {/* The create form is a sheet, opened by the header's "Add account", so
+          the screen above is the balances the user came for. */}
+      <AccountForm />
     </div>
   )
 }

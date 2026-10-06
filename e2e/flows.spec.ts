@@ -3,7 +3,11 @@ import { test, authedTest, writingTest, expect, MARKER } from './fixtures'
 import type { Locator, Page } from '@playwright/test'
 
 /**
- * The add-transaction form.
+ * The add-transaction sheet.
+ *
+ * The form is in a modal, so a test has to open it first. It is reached the way
+ * a user reaches it — the floating action in the tab bar — rather than by
+ * poking at component state, so the test also proves the trigger works.
  *
  * Fields are located by their `name` attribute rather than their label text.
  * The labels wrap their control, so the accessible name also picks up the
@@ -12,8 +16,21 @@ import type { Locator, Page } from '@playwright/test'
  * 'To account' once a transfer is selected. The name attribute is the form's
  * actual contract and does not shift with the selected type.
  */
-function addForm(page: Page): Locator {
-  return page.locator('form').filter({ hasText: 'Add transaction' }).first()
+/**
+ * Open the add-transaction sheet and return its dialog.
+ *
+ * Uses the page header's Add action rather than the tab bar's floating button:
+ * the floating action is `md:hidden`, and this suite runs at the project's
+ * desktop viewport. `e2e/sheets.spec.ts` covers the floating action at phone
+ * width, so both triggers are exercised.
+ */
+async function openAddSheet(page: Page): Promise<Locator> {
+  await page.goto('/transactions')
+  await page.getByRole('link', { name: 'Add a transaction' }).click()
+
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor({ state: 'visible' })
+  return dialog
 }
 
 function field(form: Locator, name: string): Locator {
@@ -107,8 +124,7 @@ authedTest('the dashboard renders a balance', async ({ signedIn }) => {
 writingTest('creating an expense decreases the total balance', async ({ signedIn }) => {
   const before = await readTotalBalance(signedIn)
 
-  await signedIn.goto('/transactions')
-  const form = addForm(signedIn)
+  const form = await openAddSheet(signedIn)
   await field(form, 'amount').fill('123.45')
   await field(form, 'accountId').selectOption({ label: 'Cash' })
   await field(form, 'categoryId').selectOption({ label: 'Food' })
@@ -130,8 +146,7 @@ writingTest(
     const totalBefore = await readTotalBalance(signedIn)
     const bankBefore = await readAccountBalance(signedIn, 'Bank')
 
-    await signedIn.goto('/transactions')
-    const form = addForm(signedIn)
+    const form = await openAddSheet(signedIn)
 
     await chooseType(form, 'transfer')
     // Selecting transfer must swap the category field for a destination account.
@@ -157,8 +172,7 @@ writingTest(
 writingTest(
   'an invalid amount is rejected with a readable message, not a crash',
   async ({ signedIn }) => {
-    await signedIn.goto('/transactions')
-    const form = addForm(signedIn)
+    const form = await openAddSheet(signedIn)
 
     // type=text with an inputMode, so a negative value reaches the server-side
     // validator rather than being blocked by the browser.
@@ -171,6 +185,9 @@ writingTest(
     await expect(form.getByText(/decimal places|valid amount/i)).toBeVisible({ timeout: 15_000 })
     // A rejected submission must not produce a server error page.
     await expect(signedIn).not.toHaveURL(/error/i)
+    // And the sheet must still be open, or the user has just lost everything
+    // they typed to a validation message they can no longer see.
+    await expect(form).toBeVisible()
   },
 )
 

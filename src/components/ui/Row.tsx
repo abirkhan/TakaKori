@@ -30,6 +30,7 @@ function RowContents({
   trailing,
   showChevron,
   titleAttribute,
+  actions,
   children,
 }: {
   icon?: IconName
@@ -39,6 +40,14 @@ function RowContents({
   trailing?: ReactNode
   showChevron?: boolean
   titleAttribute?: string
+  /**
+   * A control for this row's own actions, rendered after the trailing slot.
+   *
+   * Separate from `trailing` because `trailing` is the *value* — the amount, the
+   * balance — and tests locate it by `[data-row-trailing]`. Mixing a button in
+   * there would make "read the amount" and "click the menu" the same target.
+   */
+  actions?: ReactNode
   children?: ReactNode
 }) {
   return (
@@ -60,9 +69,24 @@ function RowContents({
         {children}
       </div>
 
-      {trailing && (
-        <div className="shrink-0 text-right" data-row-trailing>
-          {trailing}
+      {(trailing || actions) && (
+        /*
+         * One column, so a row with both a value and an action control spends the
+         * same width as a row with only a value.
+         *
+         * `actions` pulls left by half the row's gap, which lets a 44px tap target
+         * sit in what would otherwise be dead space beside the amount. Without it
+         * the button cost the title 54px — enough that "2026-10-06 · Food" itself
+         * truncated at 390px, losing the date, which is the most useful thing on
+         * the line.
+         */
+        <div className="flex shrink-0 items-center gap-1.5">
+          {trailing && (
+            <div className="text-right" data-row-trailing>
+              {trailing}
+            </div>
+          )}
+          {actions && <div className="-ml-1.5 shrink-0">{actions}</div>}
         </div>
       )}
       {showChevron && (
@@ -80,6 +104,8 @@ export function Row(props: {
   title: ReactNode
   subtitle?: ReactNode
   trailing?: ReactNode
+  /** A control for this row's own actions. See `RowContents`. */
+  actions?: ReactNode
   /**
    * Renders a trailing chevron.
    *
@@ -92,7 +118,7 @@ export function Row(props: {
    * Stable hook for tests and for a row that repeats its title elsewhere.
    *
    * A transaction row renders its description a second time inside the edit
-   * form, so a test that identifies a row by "text containing X" counts it
+   * sheet, so a test that identifies a row by "text containing X" counts it
    * twice. A dedicated attribute gives one unambiguous target per row. Emitted
    * only when passed, so it never appears as noise in the DOM elsewhere.
    */
@@ -106,6 +132,7 @@ export function Row(props: {
     title,
     subtitle,
     trailing,
+    actions,
     showChevron,
     titleAttribute,
     children,
@@ -120,6 +147,7 @@ export function Row(props: {
         title={title}
         subtitle={subtitle}
         trailing={trailing}
+        actions={actions}
         showChevron={showChevron}
         titleAttribute={titleAttribute}
       >
@@ -164,7 +192,12 @@ export function RowLink({
     <Link
       href={href}
       aria-label={linkLabel}
-      className="tk-row rounded-field -mx-1 px-1 transition-opacity active:opacity-70"
+      // No `-mx-1 px-1` here. That existed to give a link a full-bleed hit area
+      // inside a `p-1` list; the list now has no padding and `.tk-row` carries
+      // its own inset, so those utilities only overrode the row's padding —
+      // Tailwind's utilities layer beats the components layer — and put the
+      // link's content back at the wrong edge.
+      className="tk-row transition-opacity active:opacity-70"
     >
       <RowContents
         icon={icon}

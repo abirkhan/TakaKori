@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Layout regression guard.
  *
  * Horizontal overflow is the failure mode that is invisible in review and
@@ -10,14 +10,14 @@
  * so it gets a test.
  *
  * What this asserts, per route and per width:
- *   1. `documentElement.scrollWidth === clientWidth` — no sideways pan.
+ *   1. `documentElement.scrollWidth === clientWidth` â€” no sideways pan.
  *   2. The bottom tab bar is fully inside the viewport and its items are not
  *      overlapping, so the fixed bar cannot sit over the content.
  *   3. No field computes under 16px, which is what iOS zooms on.
  *   4. `env(safe-area-inset-bottom)` is honoured by the nav, so the home
  *      indicator does not cover a tab label in standalone/PWA mode.
  */
-import { test, expect, devices } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { config as loadEnv } from 'dotenv'
 
 loadEnv({ path: '.env.test' })
@@ -52,7 +52,7 @@ const PUBLIC_ROUTES = ['/', '/login', '/signup', '/forgot-password']
 // part that changes layout behaviour rather than engine: `isMobile` and
 // `hasTouch`, which is what makes Chromium apply mobile viewport semantics and
 // text autosizing. The width is set per test, because the interesting range is
-// 320–412 rather than any one device's exact size.
+// 320â€“412 rather than any one device's exact size.
 test.use({
   isMobile: true,
   hasTouch: true,
@@ -61,7 +61,7 @@ test.use({
   deviceScaleFactor: 3,
 })
 
-test.describe('layout — narrow phones', () => {
+test.describe('layout â€” narrow phones', () => {
   for (const width of WIDTHS) {
     test(`no horizontal overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 780 })

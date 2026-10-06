@@ -11,9 +11,9 @@ import {
   monthLabel,
 } from '@/lib/dates'
 import { listTransactions } from '@/lib/queries/transactions'
+import { transactionSubtitle } from '@/lib/transaction-view'
 import { getAccountBalances, getTotalsForRange } from '@/lib/queries/reference'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { StatTile } from '@/components/ui/StatTile'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Row, RowLink } from '@/components/ui/Row'
 import { Icon } from '@/components/ui/Icon'
@@ -96,67 +96,69 @@ export default async function DashboardPage() {
           its content, which is what makes the truncation inside the rows work. */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
         <div className="tk-stack">
-          {/* The headline is spending, not balance. Balance answers "do I have
-              money"; spend answers "am I okay", which is the question a user
-              opens a tracker to ask. */}
-          <section className="tk-card">
-            <p className="tk-eyebrow">Spent in {monthLabel(month.from)}</p>
-            <p className="tk-money-lg mt-1.5">{money(monthExpense)}</p>
+          {/* The headline is the month's *outcome*, not its spending.
 
-            {changePercent !== null ? (
-              <p className="mt-2">
+              This screen used to lead with "Spent ৳X" and then, as its second
+              element, "No spending recorded last month" — which reads as an
+              absence of data rather than a good result, and demoted the strongest
+              true statement available (you kept ৳Y) to the third tile.
+
+              A user opening a money app wants one sentence about whether they are
+              okay. So: the verdict first, in words and a number, with spending
+              underneath as the supporting detail. Overspending leads with the
+              overspend, because that is the case that needs a decision. */}
+          <section className="tk-card">
+            <p className="tk-eyebrow">
+              {monthNet >= 0 ? 'You kept' : 'You overspent'} in {monthLabel(month.from)}
+            </p>
+            <p className={`tk-money-lg mt-1.5 ${monthNet >= 0 ? 'tk-income' : 'tk-expense'}`}>
+              {money(Math.abs(monthNet))}
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {monthIncome > 0 ? (
+                <span className="tk-badge tk-badge-neutral">of {money(monthIncome)} earned</span>
+              ) : null}
+
+              {changePercent !== null ? (
                 <span
                   className={`tk-badge ${changePercent <= 0 ? 'tk-badge-income' : 'tk-badge-expense'}`}
                 >
                   <Icon name={changePercent <= 0 ? 'arrowDownLeft' : 'arrowUpRight'} size={12} />
                   {Math.abs(changePercent)}% {changePercent <= 0 ? 'below' : 'above'} last month
                 </span>
-              </p>
-            ) : (
-              <p className="tk-caption mt-2">No spending recorded last month.</p>
-            )}
+              ) : (
+                <span className="tk-badge tk-badge-neutral">First month tracked</span>
+              )}
+            </div>
 
             <div className="tk-divider my-4" />
 
-            <div className="tk-card-flat">
-              <p className="tk-eyebrow">Total balance</p>
-              <p className="tk-money mt-1" data-balance>
-                {money(totalBalance)}
-              </p>
-              <p className="tk-caption mt-1">
-                Across {balances.length} account{balances.length === 1 ? '' : 's'}
-              </p>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="tk-eyebrow">Spent</p>
+                <p className="tk-amount-lg mt-0.5">{money(monthExpense)}</p>
+              </div>
+              <div className="text-right">
+                <p className="tk-eyebrow">Total balance</p>
+                <p className="tk-amount-lg mt-0.5" data-balance>
+                  {money(totalBalance)}
+                </p>
+              </div>
             </div>
-          </section>
-
-          <section className="tk-card">
-            <div className="flex items-start gap-3 sm:gap-5">
-              <StatTile
-                icon="arrowDownLeft"
-                tone="brand"
-                label="Income"
-                value={money(monthIncome)}
-              />
-              <StatTile
-                icon="arrowUpRight"
-                tone="rose"
-                label="Expenses"
-                value={money(monthExpense)}
-              />
-              <StatTile
-                icon={monthNet >= 0 ? 'wallet' : 'alert'}
-                tone={monthNet >= 0 ? 'teal' : 'amber'}
-                label="Saved"
-                value={money(monthNet)}
-              />
-            </div>
+            <p className="tk-caption mt-2">
+              Across {balances.length} account{balances.length === 1 ? '' : 's'}
+            </p>
           </section>
 
           <section>
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="tk-section">Recent transactions</h2>
-              <Link href="/transactions" className="tk-caption text-accent font-medium">
+              {/* `tk-link`, not a bare caption: this was a 17px-tall target and
+                  it is the primary way to get from Home to the transaction list. */}
+              <Link href="/transactions" className="tk-link">
                 See all
+                <Icon name="chevronRight" size={14} className="ml-0.5" />
               </Link>
             </div>
 
@@ -166,14 +168,14 @@ export default async function DashboardPage() {
                 title="Nothing recorded yet"
                 description="Add your first expense or payment and it will appear here."
                 action={
-                  <Link href="/transactions#add" className="tk-btn tk-btn-soft tk-btn-sm mt-1">
+                  <Link href="/transactions?sheet=add" className="tk-btn tk-btn-soft mt-1">
                     <Icon name="plus" size={16} />
                     Add a transaction
                   </Link>
                 }
               />
             ) : (
-              <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+              <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
                 {recent.map((t) => (
                   <li key={t.id}>
                     <Row
@@ -186,7 +188,9 @@ export default async function DashboardPage() {
                       }
                       tone={t.type === 'income' ? 'brand' : t.type === 'transfer' ? 'sky' : 'rose'}
                       title={t.description ?? t.category?.name ?? 'Transfer'}
-                      subtitle={`${t.occurred_on} Â· ${t.account?.name ?? 'No account'}`}
+                      // The same rule as `/transactions`, so one record never reads two ways on two
+                      // screens.
+                      subtitle={transactionSubtitle(t)}
                       trailing={
                         <span className={amountClass(t.type)}>
                           {amountSign(t.type)}
@@ -205,7 +209,7 @@ export default async function DashboardPage() {
           {balances.length > 0 && (
             <section>
               <h2 className="tk-section mb-3">Accounts</h2>
-              <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
+              <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
                 {balances.map((b) => (
                   <li key={b.account_id}>
                     <Row
@@ -224,7 +228,7 @@ export default async function DashboardPage() {
               something up" belongs in one place rather than in a header menu. */}
           <section>
             <h2 className="tk-section mb-3">Plan</h2>
-            <div className="tk-card divide-hairline flex flex-col divide-y p-1">
+            <div className="tk-card tk-list divide-hairline flex flex-col divide-y">
               <RowLink
                 href="/budgets"
                 icon="target"

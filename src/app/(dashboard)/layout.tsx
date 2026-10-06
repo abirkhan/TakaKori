@@ -56,8 +56,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </header>
 
-      {/* Clearance for the fixed tab bar plus the home indicator on a phone. */}
-      <main id="main" className="tk-shell relative pb-32 md:pb-12">
+      {/* Clearance for the fixed tab bar, derived from `--nav-clear` rather than
+          a literal. The two are declared together in globals.css so they cannot
+          drift apart — the previous hard-coded `pb-32` against an implicit ~77px
+          bar is how 113 controls ended up underneath it. */}
+      <main
+        id="main"
+        className="tk-shell relative md:pb-12"
+        style={{ paddingBottom: 'var(--nav-clear)' }}
+      >
         {children}
       </main>
 

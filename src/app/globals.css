@@ -103,7 +103,11 @@
   --brand-300: #55d39d;
   --brand-400: #21bd80;
   --brand-500: #0da56c;
-  --brand-600: #0a8a5b;
+  /* Darkened from #0a8a5b, which gave a 4.38:1 white label on the primary
+     button — just under the 4.5:1 WCAG AA floor, on the app's single most
+     important control. This step measures 4.84:1. The logo's green is
+     unaffected: it is `--brand-400`/`--accent-soft`, not this slot. */
+  --brand-600: #0a8256;
   --brand-700: #0a6e4b;
   --brand-800: #0b573d;
   --brand-900: #0a4833;
@@ -113,8 +117,12 @@
   --ink-100: #e2e8ea;
   --ink-200: #ccd6da;
   --ink-300: #a9b8bd;
-  --ink-400: #7f929a;
-  --ink-500: #60737c;
+  /* The ramp no longer has a usable step at 300–400. `--ink-400` was #7f929a,
+     which measured 3.24:1 on white and carried `.tk-caption` — 56 of them on
+     /transactions alone, every date and account name, at 12px. Stepped down to
+     5.09:1. */
+  --ink-400: #5f717a;
+  --ink-500: #566a72;
   --ink-600: #4b5c64;
   --ink-700: #3a4950;
   --ink-800: #26343a;
@@ -135,10 +143,26 @@
   --on-accent: #ffffff;
   --income: var(--brand-600);
   --income-soft: var(--brand-50);
-  --expense: #cf3f4b;
+  /* #cf3f4b measured 4.29:1 on --canvas, under the floor for the 15px amounts
+     that use it. This step measures 4.86:1. */
+  --expense: #c5343f;
   --expense-soft: #fdeced;
   --warning: #a1560b;
   --warning-soft: #fdf1e0;
+
+  /* The height the fixed tab bar occupies, and the clearance `main` needs for
+     it.
+
+     Both numbers were previously a literal `128px` in a class and an implicit
+     ~77px in the bar, so they could not be checked against each other. A
+     measurement on a 390×844 screen found 113 focusable elements whose centre
+     sat under the bar, including the transaction form's own Save button.
+
+     The bar's height is now *declared* here and the bar is sized from it, so
+     changing one changes the other. `--nav-clear` is the bar plus breathing
+     room; `main` uses it as its bottom padding. */
+  --nav-height: 4.75rem;
+  --nav-clear: 7.5rem;
 
   /* The wash: the brand gradient that sits behind the top of every screen. */
   --wash-top: #d8f5e7;
@@ -174,6 +198,8 @@
     --expense-soft: #2c1618;
     --warning: #f0b357;
     --warning-soft: #2a1f10;
+    /* #6f828a measured 4.28:1 on --surface. Lightened to 4.96:1. */
+    --subtle: #7a8d95;
 
     --canvas: #0b1316;
     --surface: #121d21;
@@ -341,13 +367,30 @@
     padding: 1rem;
   }
 
-  /* Pressable card/row. The whole row is the target, thumb-sized. */
+  /* A card that holds a list of rows.
+     No padding of its own: the rows carry their own inset, so the hairline
+     dividers between them run edge to edge while the content still lines up with
+     every other card. An earlier version put `p-1` here and left the rows with
+     only vertical padding, which put list content at 24px from the card edge
+     while card content sat at 40px — four different left edges on one screen. */
+  .tk-list {
+    padding: 0;
+  }
+
+  /* Pressable card/row. The whole row is the target, thumb-sized.
+     The horizontal inset lives here, not on the container, so a row is aligned
+     the same way whether it sits in a list, a card, or on the landing page. */
   .tk-row {
     display: flex;
     align-items: center;
     gap: 0.875rem;
     min-height: 3.75rem;
-    padding-block: 0.875rem;
+    padding: 0.875rem 1.25rem;
+  }
+
+  /* Rows that sit directly on the page, with no card to align to. */
+  .tk-row-flush {
+    padding-inline: 0;
   }
 
   .tk-divider {
@@ -387,10 +430,16 @@
     color: var(--content);
   }
 
+  /* 13px, matching `.tk-eyebrow`, in `--muted`.
+     This was 12px in `--subtle`, and it was the token that failed WCAG AA
+     contrast — 3.24:1 on white, carrying 56 elements on /transactions alone
+     (every date, category and account name in a row). Raising it to 13px and
+     moving it to `--muted` fixes the contrast and collapses two visually
+     identical steps in the scale into one. */
   .tk-caption {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     line-height: 1.4;
-    color: var(--subtle);
+    color: var(--muted);
   }
 
   /* Every money figure uses these. `tabular-nums` is not optional: columns of
@@ -578,8 +627,10 @@
     padding-right: 2.5rem;
   }
 
+  /* 14px, up from 13px. A field label is read *before* the value is typed, often
+     at arm's length, and 13px was the smallest text on any form control. */
   .tk-label {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     font-weight: 500;
     color: var(--muted);
   }
@@ -597,7 +648,7 @@
   }
 
   .tk-field-error {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--expense);
   }
@@ -780,13 +831,16 @@
 
   /* --- Badges ----------------------------------------------------------- */
 
+  /* 12px, not 11px. A badge is often the only label a state has — the budget
+     "over"/"left" words live here — and 11px was below the floor for both
+     legibility and contrast. */
   .tk-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.1875rem 0.5625rem;
+    padding: 0.25rem 0.625rem;
     border-radius: var(--radius-pill);
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 600;
     line-height: 1.2;
   }
@@ -892,6 +946,187 @@
      enough not to trigger the browser. */
   input.sr-only {
     font-size: 1rem;
+  }
+
+  /* --- Modal ------------------------------------------------------------
+     A bottom sheet on a phone, a centred dialog from `sm` up. Sized from
+     `100dvh` rather than `100vh`: on mobile Safari `vh` excludes the browser
+     chrome, so a `100vh` sheet either overflows or leaves the keyboard's
+     half-covered. `dvh` tracks the *dynamic* viewport, which shrinks when the
+     keyboard opens. */
+
+  .tk-modal {
+    max-width: none;
+    max-height: none;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  /*
+   * Flex column, so the sheet's `margin-top: auto` actually pushes it to the
+   * bottom edge. `auto` margins only resolve in a flex or grid container —
+   * against the default `display: block` they compute to 0, which left a short
+   * sheet (the two-option row menu) pinned to the *top* of the screen while a
+   * tall one (the transaction form) reached the bottom only by accident of being
+   * nearly full-height. The sheet's position must not depend on how much is in
+   * it.
+   *
+   * Scoped to `[open]` deliberately. Declaring `display` on `.tk-modal`
+   * unconditionally overrides the UA's `dialog:not([open]) { display: none }` —
+   * author rules beat UA rules in the cascade regardless of specificity — so
+   * closed dialogs stayed painted and `dialog.close()` appeared to do nothing.
+   * The `:not([open])` guard is load-bearing; don't widen this selector.
+   */
+  .tk-modal[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* The dimmed page behind the sheet. */
+  .tk-modal::backdrop {
+    background-color: rgb(var(--tint) / 0.45);
+    backdrop-filter: blur(2px);
+  }
+
+  .tk-modal-sheet {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: 100dvh;
+    margin-top: auto;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    background-color: var(--surface);
+    box-shadow: var(--shadow-raised);
+    /* Clears the home indicator on a device with one, so the sheet's own
+       footer buttons are never under the gesture bar. */
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: tk-sheet-in 0.28s var(--ease-brand);
+  }
+
+  @keyframes tk-sheet-in {
+    from {
+      transform: translateY(16px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+
+  /* From `sm` up, a centred dialog. A bottom sheet on a 1440px window is a
+     phone pattern in a space that does not need it. */
+  @media (min-width: 40rem) {
+    .tk-modal-sheet {
+      width: min(34rem, calc(100% - 3rem));
+      max-height: min(44rem, calc(100dvh - 4rem));
+      margin: auto;
+      border-radius: var(--radius-card);
+    }
+  }
+
+  /* A grab handle, purely as an affordance cue for the sheet. Hidden on the
+     centred dialog where there is nothing to drag. */
+  .tk-modal-grip {
+    width: 2.25rem;
+    height: 0.25rem;
+    border-radius: var(--radius-pill);
+    background-color: var(--hairline);
+    margin: 0.5rem auto 0;
+    flex-shrink: 0;
+  }
+
+  @media (min-width: 40rem) {
+    .tk-modal-grip {
+      display: none;
+    }
+  }
+
+  .tk-modal-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1.25rem 1.25rem 0.875rem;
+    flex-shrink: 0;
+  }
+
+  /* The scrollable middle. `overscroll-behavior: contain` stops a flick at the
+     end of the form from scrolling the page behind the sheet, which is the
+     behaviour that makes a modal feel like it has sprung loose. */
+  .tk-modal-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1.25rem 1.25rem;
+    flex: 1 1 auto;
+  }
+
+  /* The action row. Pinned outside the scroll area so the primary action is
+     reachable without scrolling a long form — the defect this replaced, where
+     "Save transaction" could sit under the fixed tab bar. */
+  .tk-modal-foot {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.875rem 1.25rem 1.25rem;
+    border-top: 1px solid var(--hairline);
+    background-color: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .tk-modal-foot > * {
+    flex: 1;
+  }
+
+  /* A full-width option inside a row's action sheet.
+     56px rather than the 44px minimum: it is a whole-width target reached in a
+     sheet with nothing else on screen, and the extra height makes it obvious
+     the whole strip is pressable rather than just the label. */
+  .tk-action {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-field);
+    background-color: var(--surface-2);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-align: left;
+    color: var(--content);
+    transition: background-color 0.12s var(--ease-brand);
+  }
+
+  .tk-action:active {
+    background-color: var(--sunken);
+  }
+
+  .tk-action-danger {
+    color: var(--expense);
+  }
+
+  .tk-action-danger:active {
+    background-color: var(--expense-soft);
+  }
+
+  /* --- Text links -------------------------------------------------------
+     An inline link that must still meet the 44px tap minimum. The negative
+     block margin gives it the height without moving anything around it, so it
+     can sit on a heading's baseline. */
+
+  .tk-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    margin-block: -0.6875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--accent);
   }
 
   /* --- Navigation ------------------------------------------------------- */

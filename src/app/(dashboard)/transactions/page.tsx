@@ -1,19 +1,19 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { todayIn, resolveRange, monthLabel, type DateRangePreset } from '@/lib/dates'
 import { formatMinor, toMinor, toNumericString } from '@/lib/money'
 import { listAccounts, listCategories } from '@/lib/queries/reference'
 import { listTransactions } from '@/lib/queries/transactions'
-import { TransactionForm } from '@/components/transactions/TransactionForm'
+import { transactionSubtitle } from '@/lib/transaction-view'
 import { TransactionFilters } from '@/components/transactions/TransactionFilters'
-import { deleteTransactionAction } from '@/actions/transactions'
-import { EditTransactionForm } from '@/components/transactions/EditTransactionForm'
+import { TransactionSheetHost } from '@/components/transactions/TransactionSheetHost'
+import { TransactionList, type TransactionRowView } from '@/components/transactions/TransactionList'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Icon } from '@/components/ui/Icon'
-import { Row } from '@/components/ui/Row'
-import { amountClass, amountSign, buttonClass } from '@/components/ui/button'
+import { amountSign, buttonClass } from '@/components/ui/button'
 import type { TransactionType } from '@/types/database'
 
 const PAGE_SIZE = 50
@@ -84,30 +84,53 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       : `${range.from} to ${range.to}`
     : 'All time'
 
+  // Formatting happens here, on the server, and crosses into the client as a
+  // finished string. `formatMinor` is the only thing that turns money into text
+  // (ADR-004), and this component never sees a `numeric`.
+  const rows: TransactionRowView[] = visible.map((t) => ({
+    id: t.id,
+    formattedAmount: formatMinor(toMinor(t.amount), { currency, withSymbol: false }),
+    sign: amountSign(t.type),
+    tone: t.type,
+    title: t.description ?? t.category?.name ?? 'Transfer',
+    // One rule for what a transaction row's second line says, shared with the
+    // dashboard so the two screens cannot drift apart on the same record.
+    subtitle: transactionSubtitle(t),
+    occurredOn: t.occurred_on,
+    editAmount: toNumericString(toMinor(t.amount), currency),
+    description: t.description,
+  }))
+
   return (
     <div className="tk-stack">
       <PageHeader
         eyebrow={`${visible.length} shown`}
         title="Transactions"
         action={
-          <a
-            href="/api/export/csv"
-            className={buttonClass('quiet', { size: 'sm' })}
-            aria-label="Export as CSV"
-          >
-            <Icon name="download" size={16} />
-            <span className="hidden sm:inline">Export CSV</span>
-          </a>
+          <>
+            {/* The tab bar's floating action is `md:hidden`, so without this the
+                desktop build has no way to add a transaction at all. Two triggers,
+                one sheet, one URL — and the primary action of the screen sits in
+                its header where the eye lands first. */}
+            <Link href="/transactions?sheet=add" className={buttonClass('primary', { size: 'sm' })}>
+              <Icon name="plus" size={16} />
+              <span className="hidden sm:inline">Add</span>
+              <span className="sr-only">Add a transaction</span>
+            </Link>
+
+            <a
+              href="/api/export/csv"
+              className={buttonClass('quiet', { size: 'sm' })}
+              aria-label="Export as CSV"
+            >
+              <Icon name="download" size={16} />
+              <span className="hidden lg:inline">Export CSV</span>
+            </a>
+          </>
         }
       >
         {periodLabel}
       </PageHeader>
-
-      {/* The add form is first and always open: this is the action the tab bar's
-          floating button points at, and `#add` is where it lands. */}
-      <section className="tk-card scroll-mt-20">
-        <TransactionForm accounts={accounts} categories={categories} today={todayIn(timezone)} />
-      </section>
 
       {actionError && (
         <p role="alert" className="tk-alert tk-alert-error">
@@ -120,90 +143,31 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         <TransactionFilters accounts={accounts} categories={categories} />
       </Suspense>
 
+      {/* The list owns the screen. Adding a transaction used to be a six-field
+          form occupying the entire first screenful of the screen the user opened
+          to *look at* their transactions; it is a sheet now, opened by the tab
+          bar's floating action. */}
       <section>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="tk-section">
+            {visible.length === 0 ? 'Nothing here yet' : `Latest ${visible.length}`}
+          </h2>
+          <span className="tk-caption">{hasMore ? 'Newest first' : null}</span>
+        </div>
+
         {visible.length === 0 ? (
           <EmptyState
             icon="receipt"
             title="Nothing matches these filters"
             description="Widen the period, or clear the filters to see everything."
+            action={
+              <Link href="/transactions" className="tk-link mt-1">
+                Clear all filters
+              </Link>
+            }
           />
         ) : (
-          <ul className="tk-card divide-hairline flex flex-col divide-y p-1">
-            {visible.map((t) => (
-              <li key={t.id} className="flex flex-col">
-                <Row
-                  icon={
-                    t.type === 'transfer'
-                      ? 'repeat'
-                      : t.type === 'income'
-                        ? 'arrowDownLeft'
-                        : 'arrowUpRight'
-                  }
-                  tone={t.type === 'income' ? 'brand' : t.type === 'transfer' ? 'sky' : 'rose'}
-                  title={t.description ?? t.category?.name ?? 'Transfer'}
-                  titleAttribute="tx-description"
-                  subtitle={[
-                    t.occurred_on,
-                    t.type === 'transfer'
-                      ? `→ ${t.counterparty_account?.name ?? '?'}`
-                      : (t.category?.name ?? undefined),
-                    t.account?.name ?? undefined,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                  trailing={
-                    <span className={amountClass(t.type)}>
-                      {amountSign(t.type)}
-                      {formatMinor(toMinor(t.amount), { currency, withSymbol: false })}
-                    </span>
-                  }
-                />
-
-                {/* Edit and delete sit behind one disclosure. A row with two
-                    always-visible actions puts eight competing targets in a list
-                    of four, and a permanent delete control on a financial
-                    record is the wrong default: the row's job is to be read, and
-                    reading is what this screen is for.
-
-                    Both are plain `<form action={serverAction}>` elements, so
-                    they work with no client JavaScript at all. */}
-                <details className="group -mt-1 mb-1 ml-[3.625rem]">
-                  <summary className="tk-caption rounded-pill text-accent inline-flex cursor-pointer list-none items-center gap-1 py-1.5 font-medium">
-                    <Icon name="sliders" size={13} />
-                    Edit or remove
-                    <Icon
-                      name="chevronDown"
-                      size={13}
-                      className="transition-transform group-open:rotate-180"
-                    />
-                  </summary>
-
-                  <div className="tk-card-flat mt-1.5 flex flex-col gap-3">
-                    <EditTransactionForm
-                      transaction={{
-                        id: t.id,
-                        type: t.type,
-                        amount: toNumericString(toMinor(t.amount), currency),
-                        description: t.description,
-                        occurred_on: t.occurred_on,
-                      }}
-                    />
-
-                    <form
-                      action={deleteTransactionAction}
-                      className="border-hairline flex items-center justify-between gap-3 border-t pt-3"
-                    >
-                      <span className="tk-caption">Removes this record permanently.</span>
-                      <button type="submit" className={buttonClass('danger', { size: 'sm' })}>
-                        <Icon name="trash" size={15} />
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </details>
-              </li>
-            ))}
-          </ul>
+          <TransactionList rows={rows} />
         )}
 
         {(offset > 0 || hasMore) && (
@@ -231,6 +195,18 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           </nav>
         )}
       </section>
+
+      {/* The sheet lives on this page rather than in the layout, so the accounts
+          and categories it needs are fetched here and nowhere else. Its open
+          state is `?sheet=add`, which is what the tab bar's floating action
+          links to. */}
+      <Suspense fallback={null}>
+        <TransactionSheetHost
+          accounts={accounts}
+          categories={categories}
+          today={todayIn(timezone)}
+        />
+      </Suspense>
     </div>
   )
 }

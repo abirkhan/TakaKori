@@ -51,25 +51,36 @@ export function BottomNav() {
     <nav
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 md:hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      // Height is declared as a token (see `--nav-height`) so `main`'s clearance
+      // can be derived from it rather than guessed. These two numbers drifting
+      // apart is what left 113 controls sitting under this bar.
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        height: 'calc(var(--nav-height) + env(safe-area-inset-bottom))',
+      }}
     >
-      <div className="border-hairline bg-surface/85 flex items-stretch justify-between gap-1 border-t px-2 pt-2 pb-1.5 backdrop-blur-xl">
-        <TabLink tab={TABS[0]} active={isActive(TABS[0].href)} />
-        <TabLink tab={TABS[1]} active={isActive(TABS[1].href)} />
+      <div className="border-hairline bg-surface/85 flex h-full items-stretch gap-1 border-t px-2 pt-2 pb-1.5 backdrop-blur-xl">
+        {TABS.map((tab) => (
+          <TabLink key={tab.href} tab={tab} active={isActive(tab.href)} />
+        ))}
 
-        {/* The add action floats over the bar rather than sitting in it: it is
-            the one thing a user opens the app to do, and burying it in a row of
-            peers makes it a target they have to aim at. */}
+        {/* The add action floats above the bar's right edge rather than between
+            two tabs. Centred, it straddled the boundary between the
+            "Transactions" and "Analytics" labels and sat on top of two other
+            targets; in the corner it overlaps nothing, and the thumb still
+            reaches it because it sits on the side the hand already grips.
+
+            It links rather than opening the sheet directly: the sheet's state
+            lives in the URL, so this stays a real link that works without client
+            JavaScript and that the back button closes. */}
         <Link
-          href="/transactions#add"
-          className="tk-fab -mt-6 shrink-0 self-start"
+          href="/transactions?sheet=add"
+          className="tk-fab -mt-7 shrink-0 self-start"
+          style={{ marginRight: '0.375rem' }}
           aria-label="Add a transaction"
         >
           <Icon name="plus" size={24} strokeWidth={2.2} />
         </Link>
-
-        <TabLink tab={TABS[2]} active={isActive(TABS[2].href)} />
-        <TabLink tab={TABS[3]} active={isActive(TABS[3].href)} />
       </div>
     </nav>
   )

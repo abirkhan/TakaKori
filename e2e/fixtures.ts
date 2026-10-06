@@ -49,12 +49,11 @@ async function removeMarkedTransactions(page: import('@playwright/test').Page): 
    *
    * Anchored on `[data-row-title]`, which `Row` emits only for a transaction's
    * description. Matching on the row's whole text instead counts a transaction
-   * more than once — the per-row disclosure repeats the description inside its
-   * edit form — so the cleanup loop deletes rows it never created and then
+   * more than once, so the cleanup loop deletes rows it never created and then
    * fails on a count that cannot reach zero. `has:` also requires the attribute
    * to be an exact match, so a marker that is a prefix of another row's
    * description does not pull that row in. Keep this in step with
-   * `src/app/(dashboard)/transactions`.
+   * `src/components/transactions/TransactionList.tsx`.
    */
   const marked = page.locator('li').filter({
     has: page.locator(`[data-row-title="${MARKER}"]`),
@@ -66,14 +65,23 @@ async function removeMarkedTransactions(page: import('@playwright/test').Page): 
     if (remaining === 0) return
 
     const row = marked.first()
+    const title = (await row.locator('[data-row-title]').innerText()).trim()
 
-    // Delete lives inside the row's "Edit or remove" disclosure. Without opening
-    // it the button is `display: none` and the click times out, which would look
-    // like a delete failure rather than a selector that has fallen behind the UI.
-    const summary = row.locator('summary')
-    if (await summary.count()) await summary.click()
+    // Two sheets sit between the row and the delete: the row's action menu, then
+    // the confirmation. That is the right friction for an irreversible action on
+    // a financial record, and each sheet exists only while it is open — so this
+    // has to walk the same path a user walks rather than poking at a button that
+    // would be in the DOM unconditionally.
+    await row.getByRole('button', { name: `Actions for ${title}` }).click()
 
-    await row.getByRole('button', { name: 'Delete' }).click()
+    const menu = page.getByRole('dialog')
+    await menu.waitFor({ state: 'visible' })
+    await menu.getByRole('button', { name: 'Delete transaction' }).click()
+
+    const confirm = page.getByRole('dialog')
+    await confirm.waitFor({ state: 'visible' })
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click()
+
     await expect(marked).toHaveCount(remaining - 1, { timeout: 15_000 })
   }
 

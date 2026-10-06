@@ -112,16 +112,29 @@ must not recolour half the grid.
 
 ## 3. Typography
 
-One family, **Geist**, at four sizes and three weights. A second family would
+One family, **Geist**, at five sizes and three weights. A second family would
 cost a font download on a metered connection to say nothing.
 
-| Token         | Size / weight | Use                                   |
-| ------------- | ------------- | ------------------------------------- |
-| `.tk-title`   | 26 / 600      | The one `h1` per screen. Never twice. |
-| `.tk-section` | 15 / 600      | Section and card headings.            |
-| `.tk-body`    | 15 / 400      | Body copy, row titles.                |
-| `.tk-eyebrow` | 13 / 500      | The grey line above a figure.         |
-| `.tk-caption` | 12 / 400      | The grey line below a figure.         |
+| Token         | Size / weight | Use                                        |
+| ------------- | ------------- | ------------------------------------------ |
+| `.tk-title`   | 26 / 600      | The one `h1` per screen. Never twice.      |
+| `.tk-section` | 15 / 600      | Section and card headings.                 |
+| `.tk-body`    | 15 / 400      | Body copy, row titles.                     |
+| `.tk-label`   | 14 / 500      | Form field labels.                         |
+| `.tk-eyebrow` | 13 / 500      | The grey line above a figure.              |
+| `.tk-caption` | 13 / 400      | The grey line below a figure, row meta.    |
+| `.tk-badge`   | 12 / 600      | A badge. Often the only label a state has. |
+
+**Nothing is below 12px, and there is no 12px/13px split for two roles that read
+the same.** The scale previously carried a 12px caption in `--subtle` beside a
+13px eyebrow in `--muted`, which was both a hierarchy nobody could perceive and
+the token that failed WCAG AA — 3.24:1 on white, carrying 56 elements on
+`/transactions` alone. One step (13px) and one grey (`--muted`) fixed the
+contrast and collapsed two visually identical sizes at once. `--ink-400` moved
+down to `#5f717a` and `--ink-500` to `#566a72` so both clear 4.5:1 with headroom.
+
+If you find yourself wanting a 12px or a 11px caption, you want `.tk-badge`, or
+you want to delete the text.
 
 ### 3.1 Money is its own scale, and always tabular
 
@@ -195,14 +208,30 @@ bottom bar on a desktop window covers content and cannot be dismissed.
 
 The floating add button sits _above_ the bar rather than in it. It is the one
 thing a user opens the app to do, and burying it in a row of peers makes it a
-target they have to aim at.
+target they have to aim at. It sits at the bar's **right edge**, not its centre:
+centred, it straddled the boundary between the "Transactions" and "Analytics"
+labels and landed on top of two other targets. The thumb still reaches the
+bottom-right corner — it is the side the hand already grips.
+
+It links to `/transactions?sheet=add` rather than opening a sheet directly, so it
+keeps working before hydration and the back button closes the sheet.
+
+`--nav-height` and `--nav-clear` are declared together in `globals.css` and the
+bar is sized from `--nav-height`, because `main`'s clearance used to be a literal
+`128px` against an implicit ~77px bar. Nothing can tell those apart in review; a
+measurement on a 390×844 screen found **113 focusable elements whose centre sat
+under the bar**, including the transaction form's own save button.
+
+From `md` up the bar disappears — but the transactions screen still needs a way
+to add, so `PageHeader` carries an Add action there. A mobile-only trigger is a
+missing feature on desktop, not a responsive detail.
 
 ### 5.2 Safe areas
 
-`viewportFit: 'cover'` and `env(safe-area-inset-bottom)` on the tab bar and the
-main column's bottom padding. Without both, the home indicator sits on top of
-the last row of a list and the app looks broken in exactly the situation it was
-designed for.
+`viewportFit: 'cover'` and `env(safe-area-inset-bottom)` on the tab bar, on the
+main column's bottom padding, and on a sheet's footer. Without all three, the home
+indicator sits on top of the last row of a list — or the last button of a modal —
+and the app looks broken in exactly the situation it was designed for.
 
 ### 5.3 No field renders under 16px
 
@@ -265,33 +294,105 @@ items, `.tk-shell` for the 20/24px side gutters and the three column widths
 20px gutters, not 16px: 16px is a device inset, and matching it makes content
 look like it is escaping the screen.
 
+### 5.6 One left edge: 20, 40, or 98
+
+Every screen has exactly three left edges, and knowing which is which is most of
+the alignment work:
+
+| Left edge | What sits there                                         |
+| --------- | ------------------------------------------------------- |
+| **20px**  | The page gutter. Page titles, section headings.         |
+| **40px**  | Card content, and a row's icon tile.                    |
+| **98px**  | A row's title and subtitle — 40 + 44px tile + 14px gap. |
+
+Anything else is a bug. A screen that shows five different left edges is not
+expressive, it is unaligned.
+
+**Rows carry their own horizontal padding, not their container.** `.tk-list`
+removes a card's padding; `.tk-row` supplies `0.875rem 1.25rem`. An earlier
+version put `p-1` on the list and left rows with vertical padding only, which
+put list content at 24px while card content sat at 40px — the defect that had a
+`ul.tk-card` and its first child disagreeing about where the margin was.
+
+The consequence worth keeping: the hairline dividers between rows run edge to
+edge while the content stays on 40px. Inset content, full-bleed separators —
+the pattern iOS and Android lists both use, and it only works if the inset lives
+on the row.
+
 ---
 
 ## 6. Components
 
-Ten primitives. Compose them. If a screen needs a shape that is not here, the
+Twelve primitives. Compose them. If a screen needs a shape that is not here, the
 shape is missing from the system rather than the screen needing to improvise.
 
-| Component          | File                      | Notes                                    |
-| ------------------ | ------------------------- | ---------------------------------------- |
-| `PageHeader`       | `ui/PageHeader.tsx`       | Owns the `h1`. One per screen.           |
-| `Row` / `RowLink`  | `ui/Row.tsx`              | Icon tile, title, subtitle, trailing.    |
-| `StatTile`         | `ui/StatTile.tsx`         | Icon, value, label. Value is second.     |
-| `SegmentedControl` | `ui/SegmentedControl.tsx` | 2–3 mutually exclusive options.          |
-| `TextField` etc.   | `ui/Field.tsx`            | Label, error, `aria-describedby`.        |
-| `ProgressRing`     | `ui/ProgressRing.tsx`     | One number, one ring.                    |
-| `Icon`             | `ui/Icon.tsx`             | Hand-rolled, 24×24, stroke only.         |
-| `Logo`             | `ui/Logo.tsx`             | Mark or lockup, theme-aware.             |
-| `Alert`            | `ui/Alert.tsx`            | Tinted fill, never a border plus a fill. |
-| `EmptyState`       | `ui/EmptyState.tsx`       | Dashed outline, always says what to do.  |
+| Component            | File                        | Notes                                         |
+| -------------------- | --------------------------- | --------------------------------------------- |
+| `PageHeader`         | `ui/PageHeader.tsx`         | Owns the `h1`. One per screen.                |
+| `Row` / `RowLink`    | `ui/Row.tsx`                | Icon tile, title, subtitle, trailing, action. |
+| `StatTile`           | `ui/StatTile.tsx`           | Icon, value, label. Value is second.          |
+| `Modal`              | `ui/Modal.tsx`              | Bottom sheet. Focus trap and Escape are free. |
+| `ConfirmDeleteSheet` | `ui/ConfirmDeleteSheet.tsx` | Destructive confirmation. Cancel is default.  |
+| `RowActionsSheet`    | `ui/RowActionsSheet.tsx`    | A row's own Edit / Delete.                    |
+| `SegmentedControl`   | `ui/SegmentedControl.tsx`   | 2–3 mutually exclusive options.               |
+| `TextField` etc.     | `ui/Field.tsx`              | Label, error, `aria-describedby`.             |
+| `ProgressRing`       | `ui/ProgressRing.tsx`       | One number, one ring.                         |
+| `Icon`               | `ui/Icon.tsx`               | Hand-rolled, 24×24, stroke only.              |
+| `Logo`               | `ui/Logo.tsx`               | Mark or lockup, theme-aware.                  |
+| `Alert`              | `ui/Alert.tsx`              | Tinted fill, never a border plus a fill.      |
+| `EmptyState`         | `ui/EmptyState.tsx`         | Dashed outline, always says what to do.       |
 
-### 6.1 Why segmented controls, and when
+### 6.1 Modals are sheets, built on `<dialog>`
 
-Two or three mutually exclusive options a user switches between constantly →
-segmented control. Period presets, transaction type, category type.
+Three rules, each of which exists because ignoring it produced a specific bug:
 
-More than three, or a long list someone has to look up → `SelectField`. Account,
-category.
+**1. A create form is a sheet, never a section.** The Transactions screen is the
+second tab. A user tapping it to _see_ their spending was met by a six-field
+form occupying the whole first screenful. The list is the screen; the form is an
+interruption of it, so it interrupts. `/accounts` follows the same rule, which is
+what lets the tab label "Account" be honest about what the screen is.
+
+**2. Build on `<dialog>`, not a div.** The things a modal must get right are
+behaviours, not styles: focus trapped and moved in, Escape to close, the rest of
+the page inert, and rendering above every `z-index` including the fixed tab bar.
+Reimplementing those is how modals end up looking perfect in a screenshot and
+being unusable with a keyboard. One consequence to respect: never declare
+`display` on `.tk-modal` unconditionally — it overrides the UA's
+`dialog:not([open]) { display: none }` and closed sheets stay painted. Scope it to
+`.tk-modal[open]`.
+
+**3. The primary action goes in a pinned footer.** A long form's save button at
+the end is a target the user has to go looking for; pinned, it is present at
+every scroll position. It is a `<button form="…">` pointing at the body form by
+id — the HTML `form` attribute is what lets one form span two elements.
+
+**And the fields are controlled.** React resets an uncontrolled `<form>` once its
+action resolves, _including when the action fails_. Uncontrolled fields therefore
+wipe everything on a validation error and leave the user retyping the form beside
+the message explaining what they got wrong. Hold the draft in a child component
+that is mounted only while the sheet is open — remounting then _is_ the reset, so
+there is no reset effect and no `setState` inside one.
+
+Sheet state lives in the URL (`?sheet=add`), not in React state. The trigger can
+therefore be a real `<Link>` that works before hydration, and the back button
+closes the sheet, which is what a user pressing back on a modal expects.
+
+### 6.2 One action target per row
+
+A row that shows its own Edit _and_ Delete links carries two 44px hitboxes, and
+the link text makes it ~40% taller — on every row of a fifty-row list, for
+actions a user runs once or twice a year, with a mis-tap sitting in a list of
+financial records.
+
+So: one `⋯` button, which opens a `RowActionsSheet` with two 56px options. Delete
+sits behind two deliberate taps, which is the right friction for something with no
+undo.
+
+The button hugs the amount (`-ml-1.5` against the row's own gap). Without that it
+costs the title 54px, enough that the _date_ — the most useful word on the line —
+truncates at 390px.
+
+### 6.3 Why segmented controls, and when
 
 The test is frequency, not count: a period is changed many times a session and
 should not cost a three-tap dropdown; an account is chosen once and looked up
@@ -327,8 +428,15 @@ Direct, specific, and about the user's money rather than about the app.
 
 - **"Nothing matches these filters. Widen the period, or clear the filters."**
   — says what happened and what to do.
-- **"No spending recorded last month."** — states the absence rather than
-  showing "0% change", which would be a claim, and a false one.
+- **"You kept ৳2,905 in October."** / **"You overspent ৳1,240 in October."** — the
+  dashboard's first line is the month's _outcome_ in words and a figure, not a
+  bare "Spent". A user opening a money app wants one sentence about whether they
+  are okay. Spending is the supporting detail underneath. Overspending leads with
+  the overspend, because that is the case that needs a decision.
+- **"First month tracked"** — where a month-over-month badge would otherwise show
+  "0%", which is a claim, and a false one.
+- **"This cannot be undone."** — the delete confirmation says what is lost. "Are
+  you sure?" reports the app's uncertainty; this tells the user what will happen.
 - **"At ৳412.50 a day you reach ৳8,250 by month end."** — a forecast the user
   can act on, not "70% used".
 - Never "Oops!", never "Something went wrong", never an exclamation mark.
@@ -360,16 +468,22 @@ If either of these decisions is wrong, there is one file to replace in each case
 
 ## 9. Anti-patterns
 
-| Don't                                   | Do instead                            |
-| --------------------------------------- | ------------------------------------- |
-| `text-emerald-700`                      | `class="tk-income"`                   |
-| A 1px border on a card                  | Card on canvas, soft shadow           |
-| A chart library for two bar series      | CSS bars; the data is already a table |
-| Colour-only state                       | Colour **and** a word or a shape      |
-| A `<select>` for two options            | Segmented control                     |
-| A 40px tap target                       | 48px minimum, every time              |
-| A centred title                         | Left-aligned at every breakpoint      |
-| An icon with no label                   | Icon plus text                        |
-| "0% change" against an empty comparison | "No spending recorded last month."    |
-| A new font                              | Geist, at a new weight or size        |
-| `<select>` styled per-screen            | `.tk-field` / `fieldClass()`          |
+| Don't                                   | Do instead                                    |
+| --------------------------------------- | --------------------------------------------- |
+| `text-emerald-700`                      | `class="tk-income"`                           |
+| A 1px border on a card                  | Card on canvas, soft shadow                   |
+| A chart library for two bar series      | CSS bars; the data is already a table         |
+| Colour-only state                       | Colour **and** a word or a shape              |
+| A `<select>` for two options            | Segmented control                             |
+| A 40px tap target                       | 48px minimum, every time                      |
+| A centred title                         | Left-aligned at every breakpoint              |
+| An icon with no label                   | Icon plus text                                |
+| "0% change" against an empty comparison | "First month tracked"                         |
+| A new font                              | Geist, at a new weight or size                |
+| `<select>` styled per-screen            | `.tk-field` / `fieldClass()`                  |
+| An inline create form on a tab screen   | A sheet; the list owns the screen             |
+| A `<div>` overlay                       | `<dialog>` + `showModal()`                    |
+| Uncontrolled fields in a form action    | Controlled, in a child mounted while open     |
+| Two action links on every row           | One `⋯` opening a `RowActionsSheet`           |
+| 12px caption text                       | 13px; or `.tk-badge` if it is a label         |
+| `pb-32` guessed against a ~77px bar     | `--nav-clear`, declared beside `--nav-height` |

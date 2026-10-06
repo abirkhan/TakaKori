@@ -50,12 +50,31 @@ generic, which is worse than looking broken because it is hard to see why.
    fixed `.tk-segment` (use `.tk-segment-scroll`).
    `e2e/layout.spec.ts` fails on all three.
 
-9. **Compose from the ten primitives** in `src/components/ui/`. Do not invent a
-   new card, row, field or icon. If the shape you need is genuinely missing, add
-   it to the system — do not special-case it in one screen.
+9. **Compose from the thirteen primitives** in `src/components/ui/`. Do not invent
+   a new card, row, field, icon or sheet. If the shape you need is genuinely
+   missing, add it to the system — do not special-case it in one screen.
 
 10. **The tab bar has four tabs.** Home, Transactions, Analytics, Account. New
     destinations go under Account, not onto the bar.
+
+11. **A create form on a tab screen is a sheet, never a section.** The list owns
+    the screen. Not a style preference: `/transactions` used to open on a
+    six-field form instead of the transactions the user came to look at.
+
+12. **Never hand-roll a modal.** Use `ui/Modal.tsx`. `<dialog>` gives you a focus
+    trap, Escape, inertness behind the sheet, and the top layer for free — all
+    behaviours, not styles. And never declare `display` on `.tk-modal`
+    unconditionally: it defeats the UA's `dialog:not([open]) { display: none }`,
+    so a closed sheet stays painted and keeps swallowing clicks.
+
+13. **Never hand a form to `useActionState` with uncontrolled fields.** React
+    resets the form when the action resolves, _including on failure_ — so a
+    validation error wipes everything the user typed. Hold the draft in a child
+    mounted only while the sheet is open; remounting is the reset.
+
+14. **One action target per row.** Not a visible Edit link and a visible Delete
+    link — two 44px hitboxes and ~40% more height, on every row, for rare
+    actions. Use `Row` + `actions` → `RowActionsSheet`.
 
 ---
 
@@ -70,8 +89,8 @@ ls src/components/ui/
 ls src/app/\(dashboard\)/
 ```
 
-Ten primitives and a `.tk-*` class in `globals.css` cover every screen built so
-far. A new component is a last resort, and a new colour is nearly always a
+Thirteen primitives and a `.tk-*` class in `globals.css` cover every screen built
+so far. A new component is a last resort, and a new colour is nearly always a
 symptom of a missing role.
 
 ---
@@ -91,8 +110,10 @@ export default async function SomePage() {
       {/* Cards */}
       <section className="tk-card">…</section>
 
-      {/* Lists: one card, hairline dividers, not a stack of cards */}
-      <ul className="tk-card flex flex-col divide-y divide-hairline p-1">
+      {/* Lists: one card, hairline dividers, not a stack of cards.
+          `tk-list` removes the card's padding so dividers run edge to edge;
+          `.tk-row` supplies the 20px inset so content still lines up at 40px. */}
+      <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
         {items.map((i) => (
           <li key={i.id}>
             <Row icon="tag" title={i.name} subtitle={i.meta} trailing={…} />
@@ -100,10 +121,8 @@ export default async function SomePage() {
         ))}
       </ul>
 
-      {/* Forms */}
-      <section className="tk-card">
-        <SomeForm />
-      </section>
+      {/* The create form is a sheet, not a section — rule 11. */}
+      <SomeForm />
     </div>
   )
 }
@@ -111,6 +130,49 @@ export default async function SomePage() {
 
 `tk-stack` sets the vertical rhythm. Do not add `gap-*` to a screen's root
 container — that fights the token.
+
+### The three left edges
+
+20px (page gutter), 40px (card content and row tiles), 98px (row title: 40 + a
+44px tile + a 14px gap). Any other left edge on a screen is unaligned, not
+expressive. Row padding lives on `.tk-row`, never on the list container.
+
+---
+
+## A sheet
+
+State in the URL, so the trigger can be a `<Link>` that works before hydration
+and the back button closes it.
+
+```tsx
+'use client'
+import { useUrlSheet } from '@/components/ui/useUrlSheet'
+
+export function SomethingSheet() {
+  const { open, close } = useUrlSheet('something')
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Do the thing"
+      footer={<SaveButton formId={formId} />}   {/* a <button form={formId}> */}
+    >
+      {open && <TheFields formId={formId} />}   {/* mounted only while open */}
+    </Modal>
+  )
+}
+
+// Trigger, in a server page:
+<Link href="/somewhere?sheet=something" className={buttonClass('soft')}>
+  Add
+</Link>
+```
+
+`{open && …}` is load-bearing: it is what makes remounting the reset, which is
+what removes the need for a reset effect. The footer button points at the body
+form with the HTML `form` attribute, so one form spans two elements — two
+separate `<form>`s would submit two different field sets.
 
 ---
 
@@ -122,6 +184,9 @@ container — that fights the token.
 | A long list the user looks up                  | `SelectField`                           |
 | A row that navigates                           | `RowLink` (whole row is the link)       |
 | A row with a trailing figure                   | `Row` + `trailing`                      |
+| A row with its own Edit / Delete               | `Row` + `actions` → `RowActionsSheet`   |
+| Creating something, on a tab screen            | `Modal` + `useUrlSheet('add')`          |
+| Destroying something                           | `ConfirmDeleteSheet`                    |
 | One number as a share or a ratio               | `ProgressRing`                          |
 | Comparing several values over time             | `MonthlyTrend` (CSS bars)               |
 | An empty result                                | `EmptyState`, always with a next action |
@@ -210,11 +275,17 @@ keeps its colour everywhere.
 - [ ] Tap targets ≥ 48px
 - [ ] No field computes under 16px, including `sr-only` ones
 - [ ] No horizontal overflow at 320px (`e2e/layout.spec.ts`)
+- [ ] Nothing below 12px, and no 12px/13px split for two roles that read alike
+- [ ] Every text colour clears 4.5:1 against its own background
+- [ ] Only 20 / 40 / 98px left edges on the screen
+- [ ] A create form on a tab screen is a sheet, not a section
+- [ ] A new row carries one action target, not two visible links
+- [ ] Sheet fields are controlled and live in a child mounted while `open`
 - [ ] `prefers-reduced-motion` respected (only via the shared `--ease-brand`
       and the `tk-*` transitions — do not add bespoke keyframes)
 - [ ] Dark mode legible: check every new surface against a dark background
 - [ ] Empty state says what to do next
-- [ ] `npm run verify` passes
+- [ ] `npm run verify` passes, and `npx playwright test` if UI behaviour changed
 
 ---
 
@@ -224,4 +295,6 @@ Adding an icon library. Adding a charting library. A purple gradient that is not
 the logo's green. A hero with three feature cards. A centred title. A 1px border
 on every card. A shadow with a positive offset. A new font. Money in a
 proportional font. Colour as the only signal. A card per row in a list instead
-of one card with dividers.
+of one card with dividers. A create form occupying a tab screen's first screenful.
+A hand-rolled div-overlay "modal". Two visible Edit/Delete links on every row.
+12px body text.
