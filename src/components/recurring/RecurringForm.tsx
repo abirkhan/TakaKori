@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createRecurringAction, type ActionState } from '@/actions/planning'
 import type { Account, Category } from '@/lib/queries/reference'
 import { Alert } from '@/components/ui/Alert'
@@ -43,6 +44,10 @@ export function RecurringForm({
     createRecurringAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'recurring')
   const [type, setType] = useState<'income' | 'expense'>('expense')
 
   const visibleCategories = categories.filter((c) => c.type === type)

@@ -52,6 +52,16 @@ These are not preferences. Violating them produces silent, hard-to-debug bugs.
 11. **UI follows `docs/design-system.md`.** No raw palette classes (`text-emerald-700`),
     no `dark:` variants, no new fonts, no icon or charting library, and money is
     always tabular via `.tk-money` / `.tk-amount`. Load the `brand-design` skill.
+12. **Browser checks go through the `chrome-devtools` MCP, not ad-hoc scripts.**
+    Use `tools["chrome-devtools"]` for anything that needs a real browser:
+    inspecting the DOM, measuring layout, reading console errors, checking the
+    network, or confirming a Service Worker or cache entry. Do not hand-roll a
+    Playwright script in `scripts/` to answer a question the MCP answers — that
+    was done once (`scripts/probe-overflow.ts`) and the script was deleted
+    straight after. The MCP attaches to a running browser, so it also sees state
+    a fresh test context cannot: an installed worker, a warm IndexedDB, and the
+    console output a real session produced. `npx playwright test` is for
+    *committed* regression tests, not for one-off investigation.
 
 ## Definition of done
 

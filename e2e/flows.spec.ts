@@ -257,7 +257,36 @@ authedTest('signing out returns to the login page', async ({ signedIn }) => {
  */
 async function readTotalBalance(page: Page): Promise<string> {
   await page.goto('/dashboard')
-  return await page.locator('[data-balance]').innerText()
+
+  /**
+   * Wait for a real figure, not the loading placeholder.
+   *
+   * The dashboard's figures are loaded in the browser now, so the document
+   * arrives with an em dash where the balance goes and the number follows a
+   * moment later. Reading synchronously returned "—", which `toMinor` parses as
+   * zero.
+   *
+   * That is worse than a failing test. The transfer assertion compares a before
+   * and an after, and two zeros are equal — so **that test passed against a
+   * dashboard that had rendered nothing at all.** A regression guard that cannot
+   * fail is worse than no guard, because it reports a property that was never
+   * tested.
+   *
+   * So the wait is explicit rather than a longer timeout: wait for the element
+   * to stop being the placeholder.
+   */
+  const balance = page.locator('[data-balance]')
+  await balance.waitFor({ state: 'visible' })
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-balance]')
+      return !!el && el.textContent?.trim() !== '' && el.textContent?.trim() !== '—'
+    },
+    undefined,
+    { timeout: 20_000 },
+  )
+
+  return await balance.innerText()
 }
 
 /**

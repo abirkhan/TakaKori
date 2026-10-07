@@ -1,6 +1,7 @@
-﻿'use client'
+'use client'
 
 import { useActionState, useEffect, useId, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createTransactionAction, type ActionState } from '@/actions/transactions'
 import type { Account, Category } from '@/lib/queries/reference'
 import type { TransactionType } from '@/types/database'
@@ -222,6 +223,11 @@ export function AddTransactionSheet({
   useEffect(() => {
     if (state.success && open) onClose()
   }, [state.success, open, onClose])
+
+  // A Server Action's `revalidatePath` cannot reach the browser's cache, so the
+  // dashboard would keep showing the balance from before this write. See
+  // `useWriteInvalidation` for why this exists at all.
+  useWriteInvalidation(state.success, 'transaction')
 
   return (
     <Modal

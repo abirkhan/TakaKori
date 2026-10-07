@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { Suspense, useActionState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { signIn, type ActionState } from '../actions'
 import { Alert } from '@/components/ui/Alert'
 import { PasswordField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
-import { GoogleMark } from './GoogleMark'
+import { GoogleSignIn } from '@/components/app/GoogleSignIn'
 
 export function SignInForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(signIn, {})
@@ -67,11 +68,21 @@ export function SignInForm() {
 }
 
 /**
- * The OAuth divider is behind a Suspense boundary because `useSearchParams`
- * suspends during static rendering. Without it the whole login route becomes
- * dynamic for no benefit — the redirect parameters are optional.
+ * The OAuth divider, behind a Suspense boundary.
+ *
+ * `useSearchParams` suspends during static rendering, so reading `next` from it
+ * makes the whole login route dynamic. Without this boundary the route is
+ * dynamic for no benefit, since the redirect parameters are optional.
+ *
+ * The trigger is now a client component rather than an `<a href>` to a route
+ * handler: PKCE runs entirely in the browser (`GoogleSignIn`), so there is no
+ * URL to link to. The trade is that it needs JavaScript — which for an OAuth
+ * button is not a real loss, since the flow it starts needs JavaScript either
+ * way. `?next=` is still honoured so a deep link survives the round-trip.
  */
 function OAuthDivider() {
+  const next = useSearchParams().get('next')
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
@@ -79,10 +90,7 @@ function OAuthDivider() {
         <span className="tk-caption">or</span>
         <span className="tk-divider flex-1" />
       </div>
-      <a href="/auth/login/google" className={buttonClass('quiet', { block: true })}>
-        <GoogleMark />
-        Continue with Google
-      </a>
+      <GoogleSignIn next={next ?? '/dashboard'} />
     </div>
   )
 }

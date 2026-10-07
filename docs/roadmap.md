@@ -1,6 +1,36 @@
 # Roadmap
 
-Status: **Phase 0 complete**, Phase 1 next.
+Status: **Product phases 0–3 complete.** A separate programme is converting the
+app to a client-data single-page app with offline reads; see
+[`spa-pwa-feasibility.md`](./spa-pwa-feasibility.md) for its six phases and
+[`decisions.md`](./decisions.md) ADR-032 through ADR-037 for what has been
+decided since.
+
+That programme is **partway through and not yet safe to ship on its own**:
+
+| Step                                      | State                                                   |
+| ----------------------------------------- | ------------------------------------------------------- |
+| Installable PWA (icons, manifest, prompt) | Done, and the prompt's engagement gate was restored     |
+| Transport-agnostic query layer            | Done — `lib/queries/` reads on either transport         |
+| Client data on `/dashboard`, `/accounts`  | Done                                                    |
+| Cache invalidation map                    | Done, and it caught a live stale-balance bug on the way |
+| Writes clear the cache                    | Done — every mutating action now returns a result       |
+| Client data on the other five screens     | **Not started**                                         |
+| Offline writes (outbox)                   | **Deliberately not started** — see below                |
+
+**The two things worth knowing before touching this area again:**
+
+Both the dashboard and the account screen were moved to client data _before_ the
+writes that could invalidate them. For a window of commits, a purchase wrote its
+row and the dashboard kept showing the balance from before it. That is now
+closed — `useWriteInvalidation` is wired into all eleven call sites — but it is
+the reason the order mattered, and the reason the outbox has to wait. Queuing
+writes against unverified read-invalidation is worse than having no offline
+support at all.
+
+**Not verified, and not verifiable from a dev machine:** a real Google OAuth
+round-trip (needs interactive consent), true offline navigation (needs network
+emulation), and Netlify headers (deploy-time only).
 
 ## Phase 0 — Foundation ✅
 

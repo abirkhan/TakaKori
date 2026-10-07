@@ -110,12 +110,32 @@ base.describe('sheets', () => {
     expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 2)
   })
 
-  authedTest('the sheet never covers the tab bar', async ({ signedIn }) => {
+  authedTest('the sheet never extends past the viewport', async ({ signedIn }) => {
     await signedIn.goto('/transactions')
     await fab(signedIn).click()
 
     const dialog = signedIn.getByRole('dialog')
     await expect(dialog).toBeVisible()
+
+    /**
+     * Wait for the entry animation before measuring.
+     *
+     * `.tk-modal-sheet` animates `translateY(16px) → none` over 0.28s, and
+     * `getBoundingClientRect()` includes transforms. Reading the moment the dialog
+     * becomes visible therefore measures the sheet *mid-slide*, with its bottom
+     * still pushed down by whatever is left of the 16px. That is how this test came
+     * to report a sheet bottom of 845.17 against an 844px viewport — 1.17px of
+     * overflow that did not exist once the sheet settled.
+     *
+     * `toBeVisible()` resolves as soon as the element has a box, well before
+     * 280ms, and `evaluate` is a single read with no retry. So the wait has to be
+     * explicit, and it has to be on the sheet rather than the dialog: the animation
+     * is on the inner element and `getAnimations()` does not include descendants.
+     */
+    await signedIn.evaluate(async () => {
+      const sheet = document.querySelector('.tk-modal-sheet')
+      if (sheet) await Promise.all(sheet.getAnimations().map((a) => a.finished))
+    })
 
     const geometry = await signedIn.evaluate(() => {
       const sheet = document.querySelector('.tk-modal-sheet') as HTMLElement | null
@@ -134,12 +154,23 @@ base.describe('sheets', () => {
     expect(geometry).not.toBeNull()
     const g = geometry!
 
-    // The sheet is in the top layer, so it is drawn *over* the bar. The bar must
-    // not be visible through it, and the sheet must not extend past the viewport.
+    /**
+     * The sheet is in the top layer, so it is drawn *over* the tab bar — that is
+     * what a bottom sheet on a phone is, and asserting otherwise would be asserting
+     * a design this app does not have. What has to hold is that it does not run past
+     * the viewport, which is what would leave a sliver of page visible beneath it.
+     *
+     * This test used to be called "the sheet never covers the tab bar", and the name
+     * was wrong in a way worth recording: it never checked the tab bar at all, only
+     * viewport overflow. Renamed to what it asserts rather than left to imply a
+     * guarantee it does not provide.
+     */
     expect(g.sheetHeight).toBeLessThanOrEqual(g.viewportHeight + 1)
     expect(g.sheetBottom).toBeLessThanOrEqual(g.viewportHeight + 1)
-    // Sanity: the bar is where we expect it, so the comparison above is meaningful.
+    // Sanity: the bar is where we expect it, so the comparisons above mean
+    // something — and that it is a bar inside the viewport, not a full-height nav.
     expect(g.navTop).toBeGreaterThan(0)
+    expect(g.navTop).toBeLessThan(g.viewportHeight)
   })
 
   authedTest('a rejected save keeps the sheet open with the input intact', async ({ signedIn }) => {

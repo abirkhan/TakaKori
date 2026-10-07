@@ -775,3 +775,253 @@ complete backup and does not.
 Ordering is `occurred_on desc, id desc` because a non-unique sort column makes
 row order unstable across pages, which would drop or duplicate rows at a page
 boundary.
+
+---
+
+## ADR-032 — Posting an occurrence is a database function, not application code
+
+**Status:** Accepted
+
+**Decision:** `public.post_recurring_occurrence(target_recurring_id uuid,
+occurrence_date date) returns uuid`, `SECURITY INVOKER`, granted to
+`authenticated`. The row lock, the schedule validation, the insert and the
+watermark advance are one call. The TypeScript that did this is deleted.
+
+**Reason:** ADR-019 established that a client-supplied occurrence date must be
+checked against the rule's real schedule. Without it, one request could post
+2026-12-25 to a monthly rule anchored on the 1st: a transaction for a day the
+rule never predicted, _and_ `last_posted_on` advanced past every genuine
+occurrence, permanently suppressing them. That check lived in application code,
+which is correct only while the application code is not shipped to the client.
+
+It is now shipped to the client. `postRecurringOccurrence` is called from a
+Client Component, so whatever validates the date is whatever the user edits.
+`SECURITY INVOKER` is the important half: RLS still decides what the caller may
+touch, so this is not a privileged bypass. What moves is only the arithmetic the
+caller is not entitled to change.
+
+**Consequence:** The schedule walk now has two implementations —
+`src/lib/recurrence.ts` for prediction, this function for validation. They must
+agree, and nothing in `npm run verify` compares them.
+
+That gap was not hypothetical. The first version of `private.recurring_add`
+handled `daily` and `weekly` and let `yearly` fall through to the month-shifting
+branch, so a yearly rule advanced one **month** per step. A rule anchored on
+29 February resolved to 2025-01-29 where TypeScript resolved 2025-02-28. All 147
+unit tests passed throughout, because the TypeScript was correct and the bug was
+in code the tests no longer covered.
+
+It was found by `npm run parity`, which runs sixteen cases through both
+implementations, and by `supabase/tests/post_recurring_occurrence.sql`, which
+asserts the same matrix against SQL plus the idempotency and watermark
+behaviour. **A second implementation of anything financial needs a parity check,
+and the check is part of the change, not a follow-up.**
+
+Two behaviours improved as a side effect. `FOR UPDATE` removes the window the old
+watermark guard left open, where the insert had been attempted before anything
+stopped a concurrent duplicate — that state was reachable, which is why the old
+code had a message for it. And insert plus watermark advance are now atomic;
+previously a failure between them left a transaction with nothing recording it.
+
+---
+
+## ADR-033 — PWA icons are generated from one SVG, not exported per size
+
+**Status:** Accepted
+
+**Decision:** `public/icon.svg` is the only artwork. `scripts/generate-icons.ts`
+rasterises it into 18 files via sharp, run with `npm run icons`. Nothing
+hand-exports an icon.
+
+**Reason:** Three platforms ask for an icon by a different name at a different
+size, and each has a constraint the others do not:
+
+- Android crops a **maskable** icon to whatever shape the OEM uses, so the
+  background must be full-bleed and the artwork inset to the safe zone. The safe
+  zone is a _circle_, so a square has to be smaller than 80% to fit: at 0.8 that
+  is `s <= 0.566`. The script uses 0.55.
+- iOS masks `apple-touch-icon` into its own squircle and renders transparency as
+  **black**, so a transparent-cornered icon gets black corners. With no icon at
+  all, iOS 16.4+ draws a monogram of the site's first letter.
+- Chromium picks the icon nearest the size it wants for the Android splash
+  screen, and `sizes: "any"` gives it nothing to match against.
+
+A hand-exported set drifts: someone nudges `icon.svg` and the 512 PNG keeps the
+old mark until somebody notices on a home screen.
+
+**Consequence:** Changing the logo means changing `public/icon.svg` and running
+`npm run icons`. The generated files are committed, because nothing generates
+them on CI. Startup images additionally require one `<link>` per device, and the
+matrix is written to `startup-images.json` by the same script that renders them
+— iOS silently ignores a mismatched media query, so a file without a link and a
+link without a file both fail with no error at all.
+
+There is deliberately **no `monochrome` icon**, for a reason rather than an
+oversight: the mark is two overlapping bars and a wallet, and flattened to a
+single colour they merge into an unreadable blob. There is no notification badge
+in this app to need one.
+
+---
+
+## ADR-034 — The install prompt adapts to the platform, because two of them will not ask
+
+**Status:** Accepted
+
+**Decision:** One module, `components/app/InstallPrompt.tsx`, holding one
+`useSyncExternalStore` snapshot of what the browser supports. It renders two
+ways: `InstallBanner` asks once inside the signed-in shell, and `InstallRow`
+lives permanently under Account. Chromium installs in one tap; iOS and Safari get
+instructions; Firefox gets nothing.
+
+**Reason:** No version of iOS fires `beforeinstallprompt` or exposes an install
+API. The only route is the user performing a gesture in the Share sheet, so a
+button saying "Install" on an iPhone could only ever open instructions. Saying
+"how" is the honest label.
+
+Chromium delays the event behind engagement heuristics — HTTPS, at least one
+interaction, and at least 30 seconds on the site. So the event can legitimately
+never arrive while DevTools reports the app installable the whole time. Binding a
+button to an event that may not fire ships a dead control, which is why the label
+changes when there is no event to call.
+
+**Consequence:** Dismissal is permanent, not per-session. A prompt that reappears
+is worse than none: it turns a one-time interruption into a recurring tax on
+opening the app. The Account row is the way back, so nothing is taken away, only
+the nagging.
+
+Installability is separate from offline, and it is worth not confusing them. The
+banner is not in the browser's gift: Chrome supplies a default offline page for
+an installed app with no service worker, and this app's audience is on metered
+connections. See ADR-035 for the other half.
+
+---
+
+## ADR-035 — `useOffline` is a connectivity signal, and is not offline support
+
+**Status:** Accepted
+
+**Decision:** `experimental.useOffline` is enabled, and
+`components/app/OfflineBanner.tsx` uses `useOffline()`. Genuine offline reads are
+not implemented, and the flag is not treated as if they were.
+
+**Reason:** The name oversells it, and the two things it does are worth separating.
+It exposes `useOffline()`, which is better than `navigator.onLine` — that reports
+the OS network interface and still says `true` for a phone on a WiFi with no
+upstream internet. And a navigation, prefetch or Server Action that fails offline
+stays pending and is retried, rather than rejecting into an error page.
+
+What it is not is a cache. Its own documentation says a full page reload while
+offline still fails because the browser needs the network to deliver the document,
+and that full offline loads need a service worker. It also does not touch requests
+the app issues itself — every data read goes through `supabase-js`, not `fetch`,
+so it is outside the framework's retry entirely.
+
+**Consequence:** A green banner in the UI is not evidence that offline works. The
+banner's copy says "figures on screen are from the last time this device synced",
+which is a promise the offline work still has to keep: `lib/client/cache.ts`
+stores the last value the _database_ produced and its timestamp, and screens must
+render that timestamp, because every aggregate in this app is a SQL view or RPC
+(ADR-004) and therefore cannot be recomputed offline.
+
+Which is why the offline model is a timestamped snapshot and **not** a local
+recomputation. Mirroring `account_balances` in JavaScript would mean a second
+implementation of the money logic, and ADR-012 is a record of what a plausible
+wrong balance looks like from the outside.
+
+---
+
+## ADR-036 — Google OAuth runs in the browser, and ADR-025 stops being a hazard
+
+**Status:** Accepted. **Supersedes ADR-025.**
+
+**Decision:** `auth/login/google` and `auth/callback/google` are deleted. The
+flow is started by `components/app/GoogleSignIn.tsx` and completed by a **page**
+at `/auth/callback/google`, both client-side, using `flowType: 'pkce'` with
+`detectSessionInUrl: true`. `redirectTo` is
+`${window.location.origin}/auth/callback/google`.
+
+`auth/signout` is **kept**, deliberately — see the consequence.
+
+**Reason:** ADR-025 existed because the OAuth handler built its callback from
+`request.nextUrl.origin`, which on Netlify resolves to the _deploy_ URL. Hitting
+a deploy preview therefore sent its OAuth callback to production. Supabase
+accepted it, the flow started, and the session cookie was set on the wrong host —
+a misconfiguration with no visible symptom.
+
+A browser-side flow removes the origin question rather than fixing it. There is no
+server to derive an origin from; the redirect target is whatever host the user is
+on. A deploy preview now sends its own URL, Supabase compares it against the
+allowlist, and **rejects it loudly**. The failure moved from silent to obvious,
+which is the whole improvement.
+
+The two handlers also had a reason that no longer applies: they existed so the
+server client could write the PKCE verifier to a cookie the callback could read.
+`@supabase/ssr`'s browser client keeps the verifier in `document.cookie` — the
+same storage as the session itself — so the exchange needs no server and an
+installed PWA behaves identically to a browser tab.
+
+**Consequence:** A real Google round-trip has **not** been run. It needs live
+Google credentials and an interactive consent screen, so this is verified by
+types, by build, and by loading the callback page — not by completing a sign-in.
+Deploy previews each need a Supabase allowlist entry with the branch name in it,
+which `netlify.toml` already documents and which was previously a live production
+risk rather than a setup step.
+
+`auth/signout` stays because the dashboard's sign-out must work with JavaScript
+unavailable, on a metered connection, in an installed PWA that has been
+backgrounded. `SignOutButton` keeps the form posting to a Server Action and
+_upgrades_ it after hydration rather than replacing it.
+
+That upgrade is not decoration, and it is why this ADR sits alongside the client
+data layer. `clientContext()` memoises `workspaceId` for the life of the tab,
+and `lib/client/cache.ts` holds balances in memory and in IndexedDB. A Server
+Action can clear neither. Without the client path, signing out and back in on a
+shared device shows the previous user's balances — the exact failure the
+memoisation was built to make fast, and one that no test in this repository
+caught.
+
+---
+
+## ADR-037 - A write returns a result, so the cache can hear about it
+
+**Status:** Accepted. **Supersedes ADR-020.**
+
+**Decision:** Every mutating Server Action returns `ActionState`
+(`{ error?, success?, fieldErrors? }`). None of them calls `redirect()` except
+the two auth actions, where navigation _is_ the outcome. `ConfirmDeleteSheet` and
+the new `components/mutations/WriteForm` both drive these with `useActionState`
+and call `useWriteInvalidation(state.success, kind)`.
+
+**Reason:** ADR-020's reasoning was right and its mechanism was not. It said a
+form action must not throw, because a thrown `Error` becomes a 500 and an error
+page - a poor outcome for deleting a row that was already gone. So it redirected
+with `?error=` instead. Two things were wrong with that, and both only became
+visible once data moved into the browser.
+
+**The `?error=` was read by nobody.** No page in this app accepts `searchParams`.
+Six actions were writing a message into a URL that no component looked at, so a
+failed delete navigated the user back to a perfectly clean page and said nothing
+at all. This was not a regression from the client-data move - it had been true
+since ADR-020. It just never mattered as much while the redirect itself was the
+visible outcome.
+
+**A redirect cannot invalidate a browser-side cache.** It is a server-to-browser
+navigation; the paths it revalidates are never re-fetched. A delete would write
+its row, revalidate three routes, and leave the dashboard showing the balance
+from before it - ADR-012's failure reached through a delete rather than an edit.
+
+`success` is the signal that fixes the second problem, and `error` is the signal
+that fixes the first. Neither is decoration; both were already being computed and
+thrown into a query string.
+
+**Consequence:** `useWriteInvalidation` is a bridge, not the destination. It
+exists because the mutation still runs on the server and the cache still lives in
+the browser, so something has to carry the news across. Phase 2 removes the
+crossing by moving the mutation into the client, at which point `applyWrite` is
+called by the mutation itself and this hook has no job. It is wired into eleven
+call sites today and all eleven will be deleted together, not one at a time.
+
+`ConfirmDeleteSheet` still submits as a plain `<form action={...}>`, so deleting
+works with JavaScript unavailable. What degrades without JS is the _message_:
+React renders the returned state only on the client. That is a smaller loss than
+what it replaced, which showed nothing at all in every case.

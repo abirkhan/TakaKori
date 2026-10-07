@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useId, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createAccountAction, type ActionState } from '@/actions/transactions'
 import { Modal } from '@/components/ui/Modal'
 import { useUrlSheet } from '@/components/ui/useUrlSheet'
@@ -82,6 +83,10 @@ export function AccountForm() {
     createAccountAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'account')
   const { open, close } = useUrlSheet('account')
   const formId = useId()
 

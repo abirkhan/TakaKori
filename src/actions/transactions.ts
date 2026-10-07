@@ -1,10 +1,14 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import { createAccount, createCategory } from '@/lib/queries/reference'
-import { createTransaction, deleteTransaction, updateTransaction } from '@/lib/queries/transactions'
+import {
+  createAccount,
+  createCategory,
+  createTransaction,
+  deleteTransaction,
+  updateTransaction,
+} from '@/lib/queries/server'
 import {
   accountKindSchema,
   categoryTypeSchema,
@@ -111,26 +115,41 @@ export async function updateTransactionAction(
 /**
  * Delete a transaction.
  *
- * Redirects back with a reason on failure rather than throwing, because a
- * thrown Error from a form action becomes a 500 and an error page. That is a
- * poor outcome for something as ordinary as deleting a row that was already
- * gone.
+ * **Returns a result instead of redirecting.** ADR-020 said redirect with
+ * `?error=` rather than throw, because a thrown Error from a form action becomes
+ * a 500 and an error page, which is a poor outcome for deleting a row that was
+ * already gone. The *reason* for ADR-020 holds; the mechanism does not survive
+ * the client-data move.
+ *
+ * A redirect is a server→browser navigation. Once the cache lives in the browser,
+ * it has nothing to invalidate, so a delete would write its row, revalidate
+ * paths the browser will never re-fetch, and leave the dashboard showing the
+ * number from before — the failure ADR-012 describes. Returning `{ success }` is
+ * what lets `useWriteInvalidation` clear the cache at the moment of the write.
+ *
+ * ADR-020's other half is kept: this still never throws, and the error text is
+ * still a readable sentence rather than Postgres text.
  */
-export async function deleteTransactionAction(formData: FormData): Promise<void> {
+export async function deleteTransactionAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const parsed = uuidSchema.safeParse(formData.get('id'))
   if (!parsed.success) {
-    redirect('/transactions?error=' + encodeURIComponent('Invalid transaction id.'))
+    return { error: 'Invalid transaction id.' }
   }
 
   try {
     await deleteTransaction(parsed.data)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not delete the transaction.'
-    redirect('/transactions?error=' + encodeURIComponent(message))
+    return {
+      error: error instanceof Error ? error.message : 'Could not delete the transaction.',
+    }
   }
 
   revalidatePath('/dashboard')
   revalidatePath('/transactions')
+  return { success: 'Transaction deleted' }
 }
 
 const createAccountSchema = z.object({

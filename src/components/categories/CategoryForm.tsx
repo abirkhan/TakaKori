@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createCategoryAction, type ActionState } from '@/actions/transactions'
 import { Alert } from '@/components/ui/Alert'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
@@ -12,6 +13,10 @@ export function CategoryForm() {
     createCategoryAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'category')
   const [type, setType] = useState<'expense' | 'income'>('expense')
 
   return (

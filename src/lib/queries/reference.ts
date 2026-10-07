@@ -3,11 +3,11 @@
  *
  * Totals come from the SQL views, not from summing rows in JavaScript. The
  * views already encode the transfer semantics correctly and use
- * `security_invoker`, so RLS applies to the caller.
+ * `security_invoker`, so RLS applies to the caller — which is also why this
+ * module runs unchanged in the browser. See `context.ts`.
  */
 
-import { requireWorkspaceId } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import type { QueryContext } from './context'
 import type { AccountKind, CategoryType } from '@/types/database'
 
 export interface Account {
@@ -25,9 +25,8 @@ export interface Category {
   is_system: boolean
 }
 
-export async function listAccounts(includeArchived = false): Promise<Account[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function listAccounts(ctx: QueryContext, includeArchived = false): Promise<Account[]> {
+  const { supabase, workspaceId } = ctx
 
   let query = supabase
     .from('accounts')
@@ -42,9 +41,8 @@ export async function listAccounts(includeArchived = false): Promise<Account[]> 
   return (data ?? []) as unknown as Account[]
 }
 
-export async function listCategories(type?: CategoryType): Promise<Category[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function listCategories(ctx: QueryContext, type?: CategoryType): Promise<Category[]> {
+  const { supabase, workspaceId } = ctx
 
   let query = supabase
     .from('categories')
@@ -59,13 +57,15 @@ export async function listCategories(type?: CategoryType): Promise<Category[]> {
   return (data ?? []) as unknown as Category[]
 }
 
-export async function createAccount(input: {
-  name: string
-  kind: AccountKind
-  openingBalance?: string
-}) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function createAccount(
+  ctx: QueryContext,
+  input: {
+    name: string
+    kind: AccountKind
+    openingBalance?: string
+  },
+) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('accounts')
@@ -82,9 +82,11 @@ export async function createAccount(input: {
   return data
 }
 
-export async function createCategory(input: { name: string; type: CategoryType }) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function createCategory(
+  ctx: QueryContext,
+  input: { name: string; type: CategoryType },
+) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('categories')
@@ -115,12 +117,14 @@ export interface WorkspaceTotals {
  * answers lifetime questions only — labelling its output as "this month" would
  * be wrong, so do not do that.
  */
-export async function getTotalsForRange(range: {
-  from: string
-  to: string
-}): Promise<(WorkspaceTotals & { transaction_count: number }) | null> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getTotalsForRange(
+  ctx: QueryContext,
+  range: {
+    from: string
+    to: string
+  },
+): Promise<(WorkspaceTotals & { transaction_count: number }) | null> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase.rpc('workspace_totals_for_range', {
     target_workspace_id: workspaceId,
@@ -135,9 +139,8 @@ export async function getTotalsForRange(range: {
 }
 
 /** All-time workspace totals. */
-export async function getWorkspaceTotals(): Promise<WorkspaceTotals | null> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getWorkspaceTotals(ctx: QueryContext): Promise<WorkspaceTotals | null> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('workspace_totals')
@@ -156,9 +159,8 @@ export interface AccountBalance {
   balance: string | number
 }
 
-export async function getAccountBalances(): Promise<AccountBalance[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getAccountBalances(ctx: QueryContext): Promise<AccountBalance[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('account_balances')

@@ -5,10 +5,13 @@
  * here sums numbers in JavaScript: the values arrive as `numeric` strings and
  * adding them as JS numbers would reintroduce the float problem that
  * src/lib/money.ts exists to prevent.
+ *
+ * Every RPC here is `SECURITY INVOKER`, so calling them from the browser
+ * executes under exactly the same RLS context a Server Component gets. See
+ * `context.ts`.
  */
 
-import { requireWorkspaceId } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import type { QueryContext } from './context'
 import type { DateRange } from '@/lib/dates'
 
 export interface MonthlyTotal {
@@ -34,9 +37,11 @@ export interface CategoryTotal {
  * returned as zeros rather than being omitted. A three-month saving streak
  * should read as three bars, not one.
  */
-export async function getMonthlyTotals(range: DateRange): Promise<MonthlyTotal[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getMonthlyTotals(
+  ctx: QueryContext,
+  range: DateRange,
+): Promise<MonthlyTotal[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase.rpc('monthly_totals_for_range', {
     target_workspace_id: workspaceId,
@@ -48,9 +53,11 @@ export async function getMonthlyTotals(range: DateRange): Promise<MonthlyTotal[]
   return (data ?? []) as unknown as MonthlyTotal[]
 }
 
-export async function getExpenseByCategory(range: DateRange): Promise<CategoryTotal[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getExpenseByCategory(
+  ctx: QueryContext,
+  range: DateRange,
+): Promise<CategoryTotal[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase.rpc('expense_by_category_for_range', {
     target_workspace_id: workspaceId,
@@ -62,9 +69,11 @@ export async function getExpenseByCategory(range: DateRange): Promise<CategoryTo
   return (data ?? []) as unknown as CategoryTotal[]
 }
 
-export async function getIncomeByCategory(range: DateRange): Promise<CategoryTotal[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getIncomeByCategory(
+  ctx: QueryContext,
+  range: DateRange,
+): Promise<CategoryTotal[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase.rpc('income_by_category_for_range', {
     target_workspace_id: workspaceId,
@@ -85,9 +94,11 @@ export interface PeriodSummary {
 }
 
 /** Headline figures for a period, from the range-scoped aggregate. */
-export async function getPeriodSummary(range: DateRange): Promise<PeriodSummary> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function getPeriodSummary(
+  ctx: QueryContext,
+  range: DateRange,
+): Promise<PeriodSummary> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase.rpc('workspace_totals_for_range', {
     target_workspace_id: workspaceId,

@@ -1,0 +1,72 @@
+[
+  {
+    "src": "/icons/splash-iphone-se.png",
+    "width": 375,
+    "height": 667,
+    "dpr": 2,
+    "device": "iPhone SE, 8"
+  },
+  {
+    "src": "/icons/splash-iphone-x.png",
+    "width": 375,
+    "height": 812,
+    "dpr": 3,
+    "device": "iPhone X, XS, 11 Pro"
+  },
+  {
+    "src": "/icons/splash-iphone-12.png",
+    "width": 390,
+    "height": 844,
+    "dpr": 3,
+    "device": "iPhone 12, 13, 14"
+  },
+  {
+    "src": "/icons/splash-iphone-14-pro.png",
+    "width": 393,
+    "height": 852,
+    "dpr": 3,
+    "device": "iPhone 14 Pro, 15, 16"
+  },
+  {
+    "src": "/icons/splash-iphone-xs-max.png",
+    "width": 414,
+    "height": 896,
+    "dpr": 3,
+    "device": "iPhone XS Max, 11 Pro Max"
+  },
+  {
+    "src": "/icons/splash-iphone-14-plus.png",
+    "width": 428,
+    "height": 926,
+    "dpr": 3,
+    "device": "iPhone 14 Plus"
+  },
+  {
+    "src": "/icons/splash-iphone-15-pro-max.png",
+    "width": 430,
+    "height": 932,
+    "dpr": 3,
+    "device": "iPhone 15 Pro Max"
+  },
+  {
+    "src": "/icons/splash-ipad-air.png",
+    "width": 820,
+    "height": 1180,
+    "dpr": 2,
+    "device": "iPad Air 10.9\""
+  },
+  {
+    "src": "/icons/splash-ipad-pro-11.png",
+    "width": 834,
+    "height": 1194,
+    "dpr": 2,
+    "device": "iPad Pro 11\""
+  },
+  {
+    "src": "/icons/splash-ipad-pro-13.png",
+    "width": 1024,
+    "height": 1366,
+    "dpr": 2,
+    "device": "iPad Pro 12.9\""
+  }
+]

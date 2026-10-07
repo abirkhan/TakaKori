@@ -323,24 +323,79 @@ on the row.
 
 ## 6. Components
 
-Twelve primitives. Compose them. If a screen needs a shape that is not here, the
+Thirteen primitives. Compose them. If a screen needs a shape that is not here, the
 shape is missing from the system rather than the screen needing to improvise.
 
-| Component            | File                        | Notes                                         |
-| -------------------- | --------------------------- | --------------------------------------------- |
-| `PageHeader`         | `ui/PageHeader.tsx`         | Owns the `h1`. One per screen.                |
-| `Row` / `RowLink`    | `ui/Row.tsx`                | Icon tile, title, subtitle, trailing, action. |
-| `StatTile`           | `ui/StatTile.tsx`           | Icon, value, label. Value is second.          |
-| `Modal`              | `ui/Modal.tsx`              | Bottom sheet. Focus trap and Escape are free. |
-| `ConfirmDeleteSheet` | `ui/ConfirmDeleteSheet.tsx` | Destructive confirmation. Cancel is default.  |
-| `RowActionsSheet`    | `ui/RowActionsSheet.tsx`    | A row's own Edit / Delete.                    |
-| `SegmentedControl`   | `ui/SegmentedControl.tsx`   | 2–3 mutually exclusive options.               |
-| `TextField` etc.     | `ui/Field.tsx`              | Label, error, `aria-describedby`.             |
-| `ProgressRing`       | `ui/ProgressRing.tsx`       | One number, one ring.                         |
-| `Icon`               | `ui/Icon.tsx`               | Hand-rolled, 24×24, stroke only.              |
-| `Logo`               | `ui/Logo.tsx`               | Mark or lockup, theme-aware.                  |
-| `Alert`              | `ui/Alert.tsx`              | Tinted fill, never a border plus a fill.      |
-| `EmptyState`         | `ui/EmptyState.tsx`         | Dashed outline, always says what to do.       |
+| Component            | File                        | Notes                                                                          |
+| -------------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| `PageHeader`         | `ui/PageHeader.tsx`         | Owns the `h1`. One per screen.                                                 |
+| `Row` / `RowLink`    | `ui/Row.tsx`                | Icon tile, title, subtitle, trailing, action.                                  |
+| `StatTile`           | `ui/StatTile.tsx`           | Icon, value, label. Value is second.                                           |
+| `Modal`              | `ui/Modal.tsx`              | Bottom sheet. Focus trap and Escape are free.                                  |
+| `ConfirmDeleteSheet` | `ui/ConfirmDeleteSheet.tsx` | Destructive confirmation. Cancel is default.                                   |
+| `RowActionsSheet`    | `ui/RowActionsSheet.tsx`    | A row's own Edit / Delete.                                                     |
+| `SegmentedControl`   | `ui/SegmentedControl.tsx`   | 2–3 mutually exclusive options.                                                |
+| `TextField` etc.     | `ui/Field.tsx`              | Label, error, `aria-describedby`.                                              |
+| `ProgressRing`       | `ui/ProgressRing.tsx`       | One number, one ring.                                                          |
+| `Icon`               | `ui/Icon.tsx`               | Hand-rolled, 24×24, stroke only.                                               |
+| `Logo`               | `ui/Logo.tsx`               | Mark or lockup, theme-aware.                                                   |
+| `Alert`              | `ui/Alert.tsx`              | Tinted fill, never a border plus a fill.                                       |
+| `EmptyState`         | `ui/EmptyState.tsx`         | Dashed outline, always says what to do.                                        |
+| `GoogleMark`         | `ui/GoogleMark.tsx`         | Third-party logo. Filled, not stroke, so it is deliberately **not** in `Icon`. |
+
+### App chrome is not a primitive
+
+`src/components/app/` is a separate directory on purpose. These are not screen
+primitives — they are the shell's behaviour, they read browser state, and exactly
+one screen depends on each.
+
+| Component       | Where it renders | Notes                                                                   |
+| --------------- | ---------------- | ----------------------------------------------------------------------- |
+| `OfflineBanner` | Root layout      | Connectivity state. Informational tone, never dismissible.              |
+| `InstallBanner` | Dashboard shell  | Asks once. Its label depends on whether the browser offered an install. |
+| `InstallRow`    | Account screen   | The permanent way back after a dismissal.                               |
+| `SignOutButton` | Dashboard shell  | One control, two paths — see below.                                     |
+| `GoogleSignIn`  | Login screen     | Starts OAuth in the browser.                                            |
+
+Three rules the chrome follows, which a screen therefore does not have to think
+about:
+
+- **Nothing in here is `fixed`.** The wash, the floating action button and the tab
+  bar already compete for the edges of a screen, and ADR-031 measured 113
+  controls sitting under a bar. Chrome sits in normal flow and pushes content
+  down rather than covering it.
+- **A banner never lands over a sheet.** ADR-030 says the list owns a tab
+  screen; a sheet is in the top layer, so chrome behind it is inert and the user
+  meets it after dismissing, which is the right order.
+- **Offline is ordinary, not an incident.** TakaKori's users are on metered
+  connections, so being offline is a normal state here and gets the informational
+  tone. A banner that cries wolf about a condition its audience lives in teaches
+  people to ignore banners.
+
+`SignOutButton` earns its own note, because it looks like two buttons and is
+one. The form posts to a Server Action so sign-out works with JavaScript
+unavailable, in an installed PWA that has been backgrounded for a week;
+`onSubmit` then upgrades that same form to a browser path. The upgrade is not
+cosmetic — it clears `workspaceId` and the cached figures, which a Server Action
+cannot reach. Without it a shared device shows the previous user's balances
+(ADR-036).
+
+### Writes are not a primitive either
+
+`src/components/mutations/` holds one component, `WriteForm`, for the same
+reason `app/` is separate: it is not a _shape_, it is behaviour that every write
+needs and only one place should own.
+
+A form that writes must clear the browser's cache at the moment of the write, or
+the screen it returns to shows the figure from before it. That is not optional,
+so it is not left to each form to remember — `WriteForm` takes a `kind` from
+`lib/client/invalidations.ts` and does it. A call site cannot name a partial
+invalidation, because it never names prefixes at all.
+
+It also renders the returned `error`. That is not a convenience: until ADR-037
+the actions redirected with `?error=`, and **no page in this app reads
+`searchParams`**, so a failed write returned the user to a clean page and said
+nothing. The error was never lost — it was never displayed.
 
 ### 6.1 Modals are sheets, built on `<dialog>`
 

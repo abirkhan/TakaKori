@@ -5,13 +5,16 @@
  * call into this module; they do not build Supabase queries inline.
  *
  * Two rules are enforced here on every function:
- *   1. `workspace_id` is resolved from the session, never from caller input.
+ *   1. `workspace_id` comes from the context, never from caller input.
  *   2. Mutations filter on the primary key. An unfiltered DELETE or PATCH in
  *      PostgREST matches every row in the table.
+ *
+ * The context is a parameter rather than an ambient lookup so that this single
+ * implementation serves both Server Components and Client Components. Do not add
+ * a second copy of any of this for the browser — see `context.ts`.
  */
 
-import { requireWorkspaceId } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
+import type { QueryContext } from './context'
 import type { TransactionType } from '@/types/database'
 
 export interface TransactionFilters {
@@ -51,9 +54,8 @@ export interface TransactionWithRelations {
   counterparty_account: { id: string; name: string; kind: string } | null
 }
 
-export async function listTransactions(filters: TransactionFilters = {}) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function listTransactions(ctx: QueryContext, filters: TransactionFilters = {}) {
+  const { supabase, workspaceId } = ctx
 
   let query = supabase
     .from('transactions')
@@ -84,17 +86,19 @@ export async function listTransactions(filters: TransactionFilters = {}) {
   return (data ?? []) as unknown as TransactionWithRelations[]
 }
 
-export async function createTransaction(input: {
-  type: TransactionType
-  amount: string
-  accountId: string
-  categoryId?: string
-  counterpartyAccountId?: string
-  description?: string
-  occurredOn: string
-}) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function createTransaction(
+  ctx: QueryContext,
+  input: {
+    type: TransactionType
+    amount: string
+    accountId: string
+    categoryId?: string
+    counterpartyAccountId?: string
+    description?: string
+    occurredOn: string
+  },
+) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('transactions')
@@ -126,6 +130,7 @@ export async function createTransaction(input: {
 }
 
 export async function updateTransaction(
+  ctx: QueryContext,
   id: string,
   input: Partial<{
     type: TransactionType
@@ -137,8 +142,7 @@ export async function updateTransaction(
     occurredOn: string
   }>,
 ) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+  const { supabase, workspaceId } = ctx
 
   const patch: Record<string, unknown> = {}
   if (input.type !== undefined) patch.type = input.type
@@ -167,9 +171,8 @@ export async function updateTransaction(
   return data
 }
 
-export async function deleteTransaction(id: string) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function deleteTransaction(ctx: QueryContext, id: string) {
+  const { supabase, workspaceId } = ctx
 
   // eq('id', id) is mandatory — see updateTransaction.
   const { data, error } = await supabase

@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { parseAmount, toNumericString } from '@/lib/money'
 import {
@@ -16,7 +15,7 @@ import {
   deleteBudget,
   deleteRecurring,
   postRecurringOccurrence,
-} from '@/lib/queries/planning'
+} from '@/lib/queries/server'
 
 /**
  * Budget and recurring-transaction actions.
@@ -96,24 +95,33 @@ export async function createBudgetAction(
   return { success: 'Budget created' }
 }
 
-export async function deleteBudgetAction(formData: FormData): Promise<void> {
+/**
+ * Removes a budget.
+ *
+ * Returns a result rather than redirecting with `?error=` — the reason ADR-020
+ * gave for not throwing still holds, but a redirect is a server→browser
+ * navigation and has nothing to invalidate in a cache that lives in the browser.
+ * Returning `{ success }` is what lets `useWriteInvalidation` clear the cache at
+ * the moment of the write instead of leaving a stale budget behind it.
+ */
+export async function deleteBudgetAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const raw = formData.get('id')
   const parsed = uuidSchema.safeParse(raw)
   if (!parsed.success) {
-    redirect(`/budgets?error=${encodeURIComponent('Invalid budget id.')}`)
+    return { error: 'Invalid budget id.' }
   }
 
   try {
     await deleteBudget(parsed.data)
   } catch (error) {
-    // redirect() is called outside the try so its control-flow throw is not
-    // swallowed by the catch.
-    redirect(
-      `/budgets?error=${encodeURIComponent(errorMessage(error, 'Could not remove the budget.'))}`,
-    )
+    return { error: errorMessage(error, 'Could not remove the budget.') }
   }
 
   revalidatePath('/budgets')
+  return { success: 'Budget removed' }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,42 +207,47 @@ export async function createRecurringAction(
  * but the duplicate guard itself lives in the query layer and in the database,
  * not here.
  */
-export async function postOccurrenceAction(formData: FormData): Promise<void> {
+export async function postOccurrenceAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const id = uuidSchema.safeParse(formData.get('id'))
   const date = isoDateSchema.safeParse(formData.get('occurrenceDate'))
 
   if (!id.success || !date.success) {
-    redirect(`/recurring?error=${encodeURIComponent('That occurrence is not valid.')}`)
+    return { error: 'That occurrence is not valid.' }
   }
 
   try {
     await postRecurringOccurrence(id.data, date.data)
   } catch (error) {
-    // Includes the two integrity guards: an already-posted occurrence, and a
-    // date that is not a real occurrence of this rule.
-    redirect(
-      `/recurring?error=${encodeURIComponent(errorMessage(error, 'Could not post the transaction.'))}`,
-    )
+    // Includes the two integrity guards, both enforced in the database now
+    // (ADR-032): an already-posted occurrence, and a date that is not a real
+    // occurrence of this rule.
+    return { error: errorMessage(error, 'Could not post the transaction.') }
   }
 
   revalidatePath('/recurring')
   revalidatePath('/dashboard')
   revalidatePath('/transactions')
+  return { success: 'Transaction posted' }
 }
 
-export async function deleteRecurringAction(formData: FormData): Promise<void> {
+export async function deleteRecurringAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const parsed = uuidSchema.safeParse(formData.get('id'))
   if (!parsed.success) {
-    redirect(`/recurring?error=${encodeURIComponent('Invalid rule id.')}`)
+    return { error: 'Invalid rule id.' }
   }
 
   try {
     await deleteRecurring(parsed.data)
   } catch (error) {
-    redirect(
-      `/recurring?error=${encodeURIComponent(errorMessage(error, 'Could not delete the rule.'))}`,
-    )
+    return { error: errorMessage(error, 'Could not delete the rule.') }
   }
 
   revalidatePath('/recurring')
+  return { success: 'Rule deleted' }
 }

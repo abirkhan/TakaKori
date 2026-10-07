@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createTransactionAction, type ActionState } from '@/actions/transactions'
 import type { Account, Category } from '@/lib/queries/reference'
 import type { TransactionType } from '@/types/database'
@@ -39,6 +40,10 @@ export function TransactionForm({
     createTransactionAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'transaction')
   const [type, setType] = useState<TransactionType>('expense')
 
   const incomeCategories = categories.filter((c) => c.type === 'income')

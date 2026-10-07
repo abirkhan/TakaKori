@@ -49,6 +49,31 @@ type.
 Without the type check, an expense filed under the "Salary" category would
 silently inflate income totals.
 
+### Validity that RLS cannot express
+
+Posting an occurrence of a recurring rule is not a row-access question, so no
+policy and no trigger can answer it. The database has to know whether a date is
+genuinely an occurrence of that rule's schedule — daily, weekly, monthly or
+yearly, with an interval, an anchor, month-end clamping and an end date.
+
+That check lives in `public.post_recurring_occurrence`, as `SECURITY INVOKER`. It
+is not a privileged bypass: it runs as the calling user with RLS intact, and it
+re-checks nothing about _whose_ row this is. What it owns is arithmetic, because
+ADR-019 records what happens when the client owns it — a forged date creates a
+phantom transaction _and_ advances `last_posted_on` past every genuine
+occurrence, corrupting the ledger and the schedule in one request.
+
+Two things follow from it being in SQL:
+
+- **It is a second implementation.** `src/lib/recurrence.ts` predicts what is
+  due; this function validates what may be written. They must agree, and
+  `npm run verify` does not compare them — `npm run parity` and
+  `supabase/tests/post_recurring_occurrence.sql` do. A yearly-step bug shipped
+  and passed every unit test before that check existed.
+- **A rule in another workspace is invisible, not forbidden.** The `for update`
+  finds no row, and the error says the rule does not exist. A caller therefore
+  learns nothing about whether the id is real somewhere else.
+
 ## Row shape invariants
 
 The database refuses structurally invalid rows. These are CHECK constraints,
@@ -99,7 +124,12 @@ Before any task touching auth or data access is called complete:
 1. RLS is enabled on every table in `public`.
 2. A cross-tenant read test exists and passes (user A cannot read user B's rows).
 3. No service-role key in any file under `src/`.
-4. Every Server Action calls `requireUser()` or `requireWorkspaceId()`.
+4. Every Server Action calls `requireUser()` or `requireWorkspaceId()` — now via
+   the `serverContext` / `clientContext` facades in `lib/queries/`. A query
+   never receives a workspace id from its caller.
 5. Input is validated with Zod on the server, not just in the form.
 6. No `PATCH`/`DELETE` without an explicit `.eq('id', id)` filter — PostgREST
    matches **every** row when the filter is absent.
+7. Anything shipped to the browser that _decides_ whether a write is allowed
+   lives in the database instead. Code the client can edit is a suggestion;
+   ADR-032 is the worked example of moving one.

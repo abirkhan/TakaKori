@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createBudgetAction, type ActionState } from '@/actions/planning'
 import type { Category } from '@/lib/queries/reference'
 import { Alert } from '@/components/ui/Alert'
@@ -9,6 +10,10 @@ import { buttonClass } from '@/components/ui/button'
 
 export function BudgetForm({ categories }: { categories: Category[] }) {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(createBudgetAction, {})
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'budget')
 
   const expenseCategories = categories.filter((c) => c.type === 'expense')
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useId, useState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { updateTransactionAction, type ActionState } from '@/actions/transactions'
 import type { ExportableTransaction } from '@/lib/csv'
 import { Modal } from '@/components/ui/Modal'
@@ -48,6 +49,10 @@ export function EditTransactionSheet({
     updateTransactionAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'transaction')
   // Seeded from the record once, at mount. `TransactionList` mounts this sheet
   // only while it is open, so every open is a fresh mount and an initializer is
   // enough. An effect that re-seeded on `open` would be setState-in-effect —

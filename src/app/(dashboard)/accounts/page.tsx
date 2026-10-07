@@ -1,14 +1,10 @@
-﻿import Link from 'next/link'
-import { requireUser } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
-import { formatMinor, toMinor } from '@/lib/money'
-import { listAccounts, getAccountBalances } from '@/lib/queries/reference'
-import { AccountForm } from '@/components/accounts/AccountForm'
+import Link from 'next/link'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { StatTile } from '@/components/ui/StatTile'
-import { EmptyState } from '@/components/ui/EmptyState'
-import { Row, RowLink } from '@/components/ui/Row'
-import { Icon, iconForAccountKind } from '@/components/ui/Icon'
+import { RowLink } from '@/components/ui/Row'
+import { Icon } from '@/components/ui/Icon'
+import { AccountForm } from '@/components/accounts/AccountForm'
+import { AccountBalances, AccountTotals } from '@/components/accounts/AccountBalances'
+import { InstallRow } from '@/components/app/InstallPrompt'
 import { buttonClass } from '@/components/ui/button'
 
 /**
@@ -20,28 +16,25 @@ import { buttonClass } from '@/components/ui/button'
  * tab label promised one; it is a sheet now, opened from the header, and the
  * screen is honestly "your accounts".
  *
+ * **The first screen whose data loads in the browser, and the shape the rest of
+ * the app should move to.**
+ *
+ * This file deliberately stays a Server Component. The shell — title, section
+ * labels, the four destination links, the create sheet — is still prerendered at
+ * build time and still arrives as HTML. Only the figures are deferred, into
+ * `AccountBalances`.
+ *
+ * Marking the page `'use client'` wholesale would work and would be worse. It
+ * forfeits prerendering for the whole subtree and puts the heading, the section
+ * labels and every destination link behind a bundle download — on a metered
+ * connection, to show two numbers. The split keeps the document meaningful while
+ * JavaScript is still arriving, which is also what a search crawler and a
+ * no-JS reader see.
+ *
  * Sections are ordered by how often they are needed — balances, then planning —
  * rather than alphabetically or by an imagined information hierarchy.
  */
-export default async function AccountsPage() {
-  const { userId } = await requireUser()
-  const supabase = await createClient()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, currency')
-    .eq('id', userId)
-    .single()
-  const currency = profile?.currency ?? 'BDT'
-
-  const [accounts, balances] = await Promise.all([listAccounts(true), getAccountBalances()])
-  const balanceFor = new Map(balances.map((b) => [b.account_id, b.balance]))
-
-  const active = accounts.filter((a) => !a.is_archived)
-  const total = active.reduce(
-    (sum, a) => sum + toMinor(balanceFor.get(a.id) ?? a.opening_balance),
-    0,
-  )
-
+export default function AccountsPage() {
   return (
     <div className="tk-stack">
       <PageHeader
@@ -58,73 +51,12 @@ export default async function AccountsPage() {
         }
       />
 
-      <section className="tk-card">
-        <div className="flex items-start gap-3">
-          <StatTile
-            icon="wallet"
-            tone="brand"
-            label="Across all accounts"
-            value={formatMinor(total, { currency })}
-          />
-          <StatTile icon="card" tone="sky" label="Accounts" value={active.length} />
-          <StatTile
-            icon="check"
-            tone="teal"
-            label="Archived"
-            value={accounts.length - active.length}
-          />
-        </div>
-      </section>
+      {/* Both of these read money, so both must know the currency — which comes
+          from the profile, which is itself a network read now. That is the
+          two-phase load: profile first, then anything that formats a figure. */}
+      <AccountTotals />
 
-      <section>
-        <h2 className="tk-section mb-3">Balances</h2>
-
-        {accounts.length === 0 ? (
-          <EmptyState
-            icon="wallet"
-            title="No accounts yet"
-            description="Add the wallet, bank account or bKash number you actually spend from."
-          />
-        ) : (
-          <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
-            {accounts.map((a) => (
-              <li key={a.id}>
-                <Row
-                  icon={iconForAccountKind(a.kind)}
-                  tone={a.is_archived ? 'sky' : 'brand'}
-                  title={a.name}
-                  subtitle={
-                    <>
-                      {a.kind.replace('_', ' ')}
-                      {a.is_archived && (
-                        <span className="tk-badge tk-badge-neutral ml-1.5">archived</span>
-                      )}
-                    </>
-                  }
-                  trailing={
-                    <span
-                      className={
-                        toMinor(balanceFor.get(a.id) ?? a.opening_balance) < 0
-                          ? 'tk-amount tk-expense'
-                          : 'tk-amount'
-                      }
-                    >
-                      {formatMinor(toMinor(balanceFor.get(a.id) ?? a.opening_balance), {
-                        currency,
-                      })}
-                    </span>
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <p className="tk-caption mt-3">
-          Balances include transfers in both directions. Moving money between your own accounts is
-          neither income nor expense.
-        </p>
-      </section>
+      <AccountBalances />
 
       <section>
         <h2 className="tk-section mb-3">Plan and organise</h2>
@@ -157,6 +89,12 @@ export default async function AccountsPage() {
             title="Reports"
             subtitle="Trends and breakdowns"
           />
+
+          {/* The app itself, in the list of things about your setup. This is the
+              permanent half of the install prompt: the banner asks once and can
+              be dismissed for good, and this is where it is still reachable
+              afterwards. */}
+          <InstallRow />
         </div>
       </section>
 

@@ -2,14 +2,31 @@ import { describe, it, expect } from 'vitest'
 import { nextOccurrence, type RecurrenceRule } from '@/lib/recurrence'
 
 /**
- * Guards the integrity check in postRecurringOccurrence.
+ * Guards the occurrence-validity *predicate*.
  *
- * The action accepts an occurrence date from the client, so the server must
- * confirm it really is an occurrence of that rule. Without that check a client
- * can post any real date: a phantom transaction is created and last_posted_on
- * advances, permanently suppressing every genuine occurrence up to that date.
+ * **Read this before assuming it guards posting.** The predicate these tests
+ * describe used to be the acceptance rule inside `postRecurringOccurrence`,
+ * which is why they were the thing standing between a client and ADR-019's
+ * attack. It no longer is. Posting is now one database function,
+ * `public.post_recurring_occurrence`, because the app posts occurrences from the
+ * browser and anything shipped to the browser can be edited.
  *
- * These tests assert the predicate the action uses.
+ * So these eight tests now guard **prediction** — what `dueOccurrences` shows
+ * the user is due — and the write path is guarded by
+ * `supabase/tests/post_recurring_occurrence.sql`, which asserts the same matrix
+ * against the SQL implementation plus the idempotency and watermark behaviour
+ * that cannot be expressed as a pure predicate at all.
+ *
+ * That split is the reason both exist. The TypeScript half is fast and runs in
+ * `npm run verify`; the SQL half needs a database and is run by hand. The gap
+ * between them is where the `yearly` bug lived: the SQL implementation advanced a
+ * yearly rule one month at a time, and every test in this file passed throughout
+ * because the TypeScript was correct. `npm run parity` compares the two.
+ *
+ * The attack being guarded, in both halves: without a real check, a client can
+ * post any real date. A phantom transaction is created and `last_posted_on`
+ * advances past it, permanently suppressing every genuine occurrence up to that
+ * date.
  */
 const monthly: RecurrenceRule = {
   frequency: 'monthly',
@@ -18,7 +35,8 @@ const monthly: RecurrenceRule = {
   endsOn: null,
 }
 
-/** Mirrors the server-side acceptance rule. */
+/** Mirrors the acceptance rule, in TypeScript. The SQL twin is `recurring_add`
+ * plus the walk in `post_recurring_occurrence`; they must agree. */
 function isValidOccurrence(rule: RecurrenceRule, date: string): boolean {
   if (date < rule.anchorDate) return false
   const expected = nextOccurrence(rule, date)

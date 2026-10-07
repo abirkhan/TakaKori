@@ -33,3 +33,26 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# The service worker must never be served from a cache.
+#
+# Browsers cache a worker script for up to 24 hours and do not re-check it on
+# reload, so a cached `/sw.js` means a user runs last week's offline behaviour
+# against this week's JavaScript — failing in ways that read as bugs in the app
+# rather than as staleness in the worker.
+#
+# `Cache-Control` alone is not enough on Netlify: the CDN honours
+# `Netlify-CDN-Cache-Control` and its own rules for files it has uploaded, so
+# the worker gets an explicit header here. Registration also passes
+# `updateViaCache: 'none'`, which opts out of the browser-side HTTP cache too —
+# belt and braces, because not every browser made that default change.
+#
+# `Content-Type` is set explicitly because a worker served as `text/plain` is
+# rejected, and a broad rewrite that catches `/sw.js` and serves `index.html`
+# would otherwise look like a mysteriously empty registration.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Content-Type = "application/javascript; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Netlify-CDN-Cache-Control = "no-store"

@@ -211,3 +211,66 @@ export function RowLink({
     </Link>
   )
 }
+
+/**
+ * A row that acts rather than navigates: a disclosure, a toggle, a control.
+ *
+ * **`RowLink` and this are the same shape, and they must stay that way.** The
+ * interactive element carries `.tk-row` itself rather than wrapping a `<Row>`.
+ * That is not tidiness — nesting one flex row inside another gives the inner one
+ * `min-width: auto`, so it refuses to shrink below its own min-content, and with
+ * the doubled 40px of padding the row measured 372px and pushed the whole screen
+ * sideways on a 320px phone (ADR-029). The Account screen's install row did
+ * exactly this and `layout.spec.ts` caught it.
+ *
+ * `type="button"` is set unconditionally. A `<button>` inside a form defaults to
+ * `submit`, and a row that silently submits the surrounding form is not a
+ * disclosure.
+ */
+export function RowButton({
+  onClick,
+  expanded,
+  controls,
+  icon,
+  tone = 'brand',
+  title,
+  subtitle,
+  trailing,
+  titleAttribute,
+  showChevron,
+  className = '',
+}: {
+  onClick: () => void
+  /** Renders `aria-expanded`, for a disclosure. Omit when this is not one. */
+  expanded?: boolean
+  /** The id of the region this row opens, for `aria-controls`. */
+  controls?: string
+  icon?: IconName
+  tone?: 'brand' | 'sky' | 'amber' | 'rose' | 'violet' | 'teal'
+  title: ReactNode
+  subtitle?: ReactNode
+  trailing?: ReactNode
+  titleAttribute?: string
+  showChevron?: boolean
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      className={`tk-row w-full text-left transition-opacity active:opacity-70 ${className}`}
+    >
+      <RowContents
+        icon={icon}
+        tone={tone}
+        title={title}
+        subtitle={subtitle}
+        trailing={trailing}
+        titleAttribute={titleAttribute}
+        showChevron={showChevron}
+      />
+    </button>
+  )
+}

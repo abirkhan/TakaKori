@@ -1,4 +1,5 @@
 import { deleteRecurringAction, postOccurrenceAction } from '@/actions/planning'
+import { WriteForm } from '@/components/mutations/WriteForm'
 import type { RecurringView } from '@/lib/queries/planning'
 import { toMinor } from '@/lib/money'
 import { Alert } from '@/components/ui/Alert'
@@ -60,13 +61,13 @@ export function RecurringCard({
                 {occ.clamped && (
                   <span className="tk-caption text-warning">short month, moved to last day</span>
                 )}
-                <form action={postOccurrenceAction}>
+                <WriteForm action={postOccurrenceAction} kind="occurrence">
                   <input type="hidden" name="id" value={rule.id} />
                   <input type="hidden" name="occurrenceDate" value={occ.date} />
                   <button type="submit" className={buttonClass('soft', { size: 'sm' })}>
                     Post this
                   </button>
-                </form>
+                </WriteForm>
               </li>
             ))}
           </ul>
@@ -99,12 +100,12 @@ export function RecurringCard({
         </details>
       )}
 
-      <form action={deleteRecurringAction} className="mt-3 flex justify-end">
+      <WriteForm action={deleteRecurringAction} kind="recurring" className="mt-3 flex justify-end">
         <input type="hidden" name="id" value={rule.id} />
         <button type="submit" className="tk-caption text-expense font-medium">
           Delete rule
         </button>
-      </form>
+      </WriteForm>
     </article>
   )
 }

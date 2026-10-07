@@ -1,4 +1,5 @@
 import { deleteBudgetAction } from '@/actions/planning'
+import { WriteForm } from '@/components/mutations/WriteForm'
 import type { BudgetView } from '@/lib/queries/planning'
 import { Alert } from '@/components/ui/Alert'
 import { Icon } from '@/components/ui/Icon'
@@ -96,12 +97,12 @@ export function BudgetCard({
         <Alert tone="warning">You are spending faster than this budget allows.</Alert>
       )}
 
-      <form action={deleteBudgetAction} className="mt-3 flex justify-end">
+      <WriteForm action={deleteBudgetAction} kind="budget" className="mt-3 flex justify-end">
         <input type="hidden" name="id" value={budget.id} />
         <button type="submit" className="tk-caption text-expense font-medium">
           Remove budget
         </button>
-      </form>
+      </WriteForm>
     </article>
   )
 }

@@ -1,18 +1,22 @@
 /**
  * Budgets and recurring transactions.
  *
- * Every function resolves the caller's workspace from the session. None accept
- * a workspace id.
+ * Every function takes the caller's workspace on a context rather than
+ * resolving it from the session, so the same implementation serves Server
+ * Components and Client Components. None accept a workspace id.
+ *
+ * Note the asymmetry in the recurrence imports: `dueOccurrences` and
+ * `upcomingOccurrences` are used here to *predict* what is due and to render it,
+ * and they remain in TypeScript because the UI has to show them before anything
+ * is posted. `nextOccurrence` is gone — it was only ever needed to validate a
+ * date at write time, and that validation now lives in
+ * `public.post_recurring_occurrence`. Predicting and validating being in
+ * different places is deliberate: the read is a convenience, the write is a
+ * guarantee, and only the guarantee has to be un-editable.
  */
 
-import { requireWorkspaceId } from '@/lib/auth'
-import { createClient } from '@/lib/supabase/server'
-import {
-  dueOccurrences,
-  nextOccurrence,
-  upcomingOccurrences,
-  type Frequency,
-} from '@/lib/recurrence'
+import type { QueryContext } from './context'
+import { dueOccurrences, upcomingOccurrences, type Frequency } from '@/lib/recurrence'
 import { computeBudgetProgress, daysInCalendarMonth, monthStartOf } from '@/lib/budgets'
 import type { BudgetProgress } from '@/lib/budgets'
 import { toMinor, type Minor } from '@/lib/money'
@@ -39,9 +43,11 @@ export interface BudgetView extends BudgetProgress {
  * and the month bounds are resolved in the user's timezone so "this month"
  * means their month.
  */
-export async function listBudgetsWithProgress(today: string): Promise<BudgetView[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function listBudgetsWithProgress(
+  ctx: QueryContext,
+  today: string,
+): Promise<BudgetView[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data: budgets, error: budgetError } = await supabase
     .from('budgets')
@@ -108,9 +114,11 @@ export async function listBudgetsWithProgress(today: string): Promise<BudgetView
   })
 }
 
-export async function createBudget(input: { categoryId: string | null; amount: string }) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function createBudget(
+  ctx: QueryContext,
+  input: { categoryId: string | null; amount: string },
+) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('budgets')
@@ -130,9 +138,8 @@ export async function createBudget(input: { categoryId: string | null; amount: s
   return data
 }
 
-export async function deleteBudget(id: string) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function deleteBudget(ctx: QueryContext, id: string) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('budgets')
@@ -169,9 +176,8 @@ export interface RecurringRow {
   counterparty_name: string | null
 }
 
-export async function listRecurring(): Promise<RecurringRow[]> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function listRecurring(ctx: QueryContext): Promise<RecurringRow[]> {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('recurring_transactions')
@@ -224,96 +230,84 @@ export function toRecurringView(row: RecurringRow, today: string): RecurringView
  * a double submission cannot create a duplicate.
  */
 export async function postRecurringOccurrence(
+  ctx: QueryContext,
   recurringId: string,
   occurrenceDate: string,
 ): Promise<void> {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+  const { supabase } = ctx
 
-  const { data: rule, error: loadError } = await supabase
-    .from('recurring_transactions')
-    .select(
-      'id, type, amount, description, account_id, category_id, counterparty_account_id, anchor_date, last_posted_on, frequency, interval_count, ends_on',
-    )
-    .eq('id', recurringId)
-    .eq('workspace_id', workspaceId)
-    .maybeSingle()
-
-  if (loadError) throw new Error(`Failed to load rule: ${loadError.message}`)
-  if (!rule) throw new Error('Rule not found')
-
-  const row = rule as unknown as RecurringRow
-
-  // The occurrence date must actually BE an occurrence of this rule.
-  //
-  // Without this, a client can post any real date: a transaction is created for
-  // a day the rule never predicted, and last_posted_on advances to that date,
-  // which permanently suppresses every genuine occurrence up to and including
-  // it. The idempotency guard below cannot catch this, because a large date
-  // always satisfies it.
-  if (occurrenceDate < row.anchor_date) {
-    throw new Error('That date is before the rule starts.')
-  }
-
-  const schedule = {
-    frequency: row.frequency as Frequency,
-    interval: row.interval_count,
-    anchorDate: row.anchor_date,
-    endsOn: row.ends_on,
-  }
-  const expected = nextOccurrence(schedule, occurrenceDate)
-  if (!expected || expected.date !== occurrenceDate) {
-    throw new Error('That date is not a scheduled occurrence of this rule.')
-  }
-
-  // Idempotency check: refuse if this occurrence or an earlier one is posted.
-  if (row.last_posted_on && occurrenceDate <= row.last_posted_on) {
-    throw new Error('That occurrence has already been posted.')
-  }
-
-  const { error: insertError } = await supabase.from('transactions').insert({
-    workspace_id: workspaceId,
-    account_id: row.account_id,
-    category_id: row.type === 'transfer' ? null : row.category_id,
-    counterparty_account_id: row.type === 'transfer' ? row.counterparty_account_id : null,
-    type: row.type,
-    amount: row.amount,
-    description: row.description,
-    occurred_on: occurrenceDate,
+  /**
+   * The whole operation is one database function now.
+   *
+   * This used to be ~70 lines of application code: load the rule, verify the
+   * date is a real occurrence of the schedule, insert the transaction, then
+   * advance `last_posted_on`. The verification was the part that mattered, and
+   * ADR-019 explains why — without it, one request could post a date the rule
+   * never predicted *and* advance the watermark past every genuine occurrence,
+   * corrupting both the ledger and the schedule.
+   *
+   * That was correct while the code ran on a server. Posting from the browser is
+   * the whole point of the SPA work, and anything shipped to the client can be
+   * edited — so the check would have shipped to the client too. It lives in
+   * `public.post_recurring_occurrence` instead, as `SECURITY INVOKER`, so RLS
+   * still decides what the caller may touch and the schedule arithmetic is not
+   * theirs to change.
+   *
+   * Two other things improved by accident of moving it:
+   *
+   *   - The row lock (`for update` inside the function) removes the window the
+   *     old watermark guard left open, where the transaction insert had been
+   *     attempted before anything stopped a concurrent duplicate. The old code
+   *     had a message for exactly that case — "saved but the rule could not be
+   *     updated" — because the state it described was reachable.
+   *   - Insert and watermark advance are now atomic. Previously a failure between
+   *     them left a transaction with nothing recording it.
+   *
+   * The messages below are unchanged from the ones this function threw, so no
+   * user-visible string moves. The mapping is by SQLSTATE rather than by
+   * message text: matching on prose would break the moment a message is reworded,
+   * and would silently fall through to a generic error the user cannot act on.
+   */
+  const { error } = await supabase.rpc('post_recurring_occurrence', {
+    target_recurring_id: recurringId,
+    occurrence_date: occurrenceDate,
   })
 
-  if (insertError) throw new Error(`Failed to post the transaction: ${insertError.message}`)
+  if (!error) return
 
-  // Advance the watermark. eq guards make a concurrent second post a no-op.
-  const { error: advanceError } = await supabase
-    .from('recurring_transactions')
-    .update({ last_posted_on: occurrenceDate })
-    .eq('id', recurringId)
-    .eq('workspace_id', workspaceId)
-    .or(`last_posted_on.is.null,last_posted_on.lt.${occurrenceDate}`)
-
-  if (advanceError) {
-    throw new Error(
-      'The transaction was saved but the rule could not be updated. ' +
-        'Check for a duplicate before posting again.',
-    )
+  switch (error.code) {
+    // Raised when the row is not visible. RLS filters other workspaces' rules
+    // out entirely, so this is also what a caller sees for an id that does not
+    // exist — which is the point: the two are indistinguishable.
+    case 'P0002':
+      throw new Error('That recurring rule no longer exists.')
+    // 23505. The occurrence, or an earlier one, is already posted.
+    case '23505':
+      throw new Error('That occurrence has already been posted.')
+    // 23514. Not a real occurrence of this schedule, or the schedule has ended.
+    case '23514':
+      throw new Error('That date is not a scheduled occurrence of this rule.')
+    default:
+      throw new Error(`Failed to post the occurrence: ${error.message}`)
   }
 }
 
-export async function createRecurring(input: {
-  type: TransactionType
-  amount: string
-  accountId: string
-  categoryId?: string
-  counterpartyAccountId?: string
-  description?: string
-  frequency: Frequency
-  intervalCount: number
-  anchorDate: string
-  endsOn?: string | null
-}) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function createRecurring(
+  ctx: QueryContext,
+  input: {
+    type: TransactionType
+    amount: string
+    accountId: string
+    categoryId?: string
+    counterpartyAccountId?: string
+    description?: string
+    frequency: Frequency
+    intervalCount: number
+    anchorDate: string
+    endsOn?: string | null
+  },
+) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('recurring_transactions')
@@ -338,9 +332,8 @@ export async function createRecurring(input: {
   return data
 }
 
-export async function deleteRecurring(id: string) {
-  const workspaceId = await requireWorkspaceId()
-  const supabase = await createClient()
+export async function deleteRecurring(ctx: QueryContext, id: string) {
+  const { supabase, workspaceId } = ctx
 
   const { data, error } = await supabase
     .from('recurring_transactions')

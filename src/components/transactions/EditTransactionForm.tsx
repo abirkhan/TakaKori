@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
+import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { updateTransactionAction, type ActionState } from '@/actions/transactions'
 import type { ExportableTransaction } from '@/lib/csv'
 import { Alert } from '@/components/ui/Alert'
@@ -25,6 +26,10 @@ export function EditTransactionForm({
     updateTransactionAction,
     {},
   )
+
+  // A Server Action's revalidatePath cannot reach the browser's cache, so without
+  // this the dashboard keeps showing the figure from before the write.
+  useWriteInvalidation(state.success, 'transaction')
 
   return (
     <form action={formAction} className="flex flex-col gap-3">

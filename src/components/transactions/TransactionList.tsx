@@ -145,6 +145,7 @@ export function TransactionList({ rows }: { rows: TransactionRowView[] }) {
             setOpen(null)
           }}
           action={deleteTransactionAction}
+          kind="transaction"
           hidden={{ id: selected.id }}
           title="Delete this transaction?"
           description="This cannot be undone."

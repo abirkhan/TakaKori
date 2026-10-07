@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
-import { signOut } from '@/app/(auth)/actions'
 import { BottomNav, HeaderNav } from '@/components/ui/NavBar'
 import { Logo } from '@/components/ui/Logo'
-import { Icon } from '@/components/ui/Icon'
+import { InstallBanner } from '@/components/app/InstallPrompt'
+import { SignOutButton } from '@/components/app/SignOutButton'
 
 /**
  * The authenticated shell.
@@ -16,8 +16,11 @@ import { Icon } from '@/components/ui/Icon'
  * moving between tabs shows one continuous surface rather than a header that
  * re-declares itself on each route.
  *
- * Sign-out is a plain `<form action={signOut}>`: it must work with JavaScript
- * unavailable, on a metered connection, in a PWA that has been backgrounded.
+ * Sign-out is a form posting a Server Action, upgraded after hydration to a
+ * client path that also clears the cached workspace and figures — see
+ * `components/app/SignOutButton.tsx`. The Server Action is kept deliberately:
+ * it is the path that works with JavaScript unavailable, on a metered
+ * connection, in a PWA that has been backgrounded.
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { email } = await requireUser()
@@ -41,20 +44,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {email && (
               <span className="tk-caption hidden max-w-[18ch] truncate lg:inline">{email}</span>
             )}
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="tk-btn tk-btn-ghost tk-btn-sm"
-                aria-label="Sign out"
-                title="Sign out"
-              >
-                <Icon name="logout" size={17} />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
-            </form>
+            <SignOutButton />
           </div>
         </div>
       </header>
+
+      {/* This sits in normal flow between the app bar and the content, so it
+          pushes the page down rather than covering it. Nothing here is `fixed`:
+          the wash, the floating action button and the tab bar already compete for
+          the edges of this screen, and a third fixed element is the failure
+          ADR-031 measured — 113 focusable elements sitting under a bar.
+
+          The offline banner is in the root layout instead, because losing signal
+          matters on the sign-in screen too: that is precisely where a user taps
+          submit and waits for nothing to happen. */}
+      <InstallBanner />
 
       {/* Clearance for the fixed tab bar, derived from `--nav-clear` rather than
           a literal. The two are declared together in globals.css so they cannot
