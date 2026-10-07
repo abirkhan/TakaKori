@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth'
 import { BottomNav, HeaderNav } from '@/components/ui/NavBar'
 import { Logo } from '@/components/ui/Logo'
 import { InstallBanner } from '@/components/app/InstallPrompt'
+import { Toaster } from '@/components/app/Toast'
 import { SignOutButton } from '@/components/app/SignOutButton'
 
 /**
@@ -40,10 +41,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
-            <HeaderNav />
             {email && (
               <span className="tk-caption hidden max-w-[18ch] truncate lg:inline">{email}</span>
             )}
+            <HeaderNav />
             <SignOutButton />
           </div>
         </div>
@@ -73,6 +74,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </main>
 
       <BottomNav />
+
+      {/* Outermost, so it is the last thing mounted and the first thing read.
+          Floating by design — unlike everything else in this shell — because a
+          confirmation that pushed the content down would move the row the user
+          had just written to. Its layer is `pointer-events: none`, so it never
+          intercepts a tap meant for the list. See `components/app/Toast.tsx`. */}
+      <Toaster />
     </div>
   )
 }

@@ -100,7 +100,12 @@ export function RecurringCard({
         </details>
       )}
 
-      <WriteForm action={deleteRecurringAction} kind="recurring" className="mt-3 flex justify-end">
+      <WriteForm
+        action={deleteRecurringAction}
+        kind="recurring"
+        savedMessage="Recurring rule deleted."
+        className="mt-3 flex justify-end"
+      >
         <input type="hidden" name="id" value={rule.id} />
         <button type="submit" className="tk-caption text-expense font-medium">
           Delete rule

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Layout regression guard.
  *
  * Horizontal overflow is the failure mode that is invisible in review and
@@ -10,14 +10,14 @@
  * so it gets a test.
  *
  * What this asserts, per route and per width:
- *   1. `documentElement.scrollWidth === clientWidth` â€” no sideways pan.
+ *   1. `documentElement.scrollWidth === clientWidth` — no sideways pan.
  *   2. The bottom tab bar is fully inside the viewport and its items are not
  *      overlapping, so the fixed bar cannot sit over the content.
  *   3. No field computes under 16px, which is what iOS zooms on.
  *   4. `env(safe-area-inset-bottom)` is honoured by the nav, so the home
  *      indicator does not cover a tab label in standalone/PWA mode.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect, authedTest } from './fixtures'
 import { config as loadEnv } from 'dotenv'
 
 loadEnv({ path: '.env.test' })
@@ -52,7 +52,7 @@ const PUBLIC_ROUTES = ['/', '/login', '/signup', '/forgot-password']
 // part that changes layout behaviour rather than engine: `isMobile` and
 // `hasTouch`, which is what makes Chromium apply mobile viewport semantics and
 // text autosizing. The width is set per test, because the interesting range is
-// 320â€“412 rather than any one device's exact size.
+// 320–412 rather than any one device's exact size.
 test.use({
   isMobile: true,
   hasTouch: true,
@@ -61,7 +61,7 @@ test.use({
   deviceScaleFactor: 3,
 })
 
-test.describe('layout â€” narrow phones', () => {
+test.describe('layout — narrow phones', () => {
   for (const width of WIDTHS) {
     test(`no horizontal overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 780 })
@@ -76,22 +76,47 @@ test.describe('layout â€” narrow phones', () => {
         await page.goto(route, { waitUntil: 'networkidle' })
         await page.waitForTimeout(200)
 
-        const { scrollWidth, clientWidth, widest } = await page.evaluate(() => {
+        const { scrollWidth, clientWidth, offenders } = await page.evaluate(() => {
           const de = document.documentElement
-          let widest = ''
-          for (const el of Array.from(document.querySelectorAll('main *'))) {
+
+          /**
+           * The whole document, not just `main`.
+           *
+           * The previous version scanned `main *` only, which meant that when the app
+           * bar overflowed the test reported a **blank** offender and named the route
+           * — so the failure said "something is 7px too wide on /dashboard" and
+           * nothing about which element. A diagnostic that costs more to debug than
+           * the bug it exists to catch.
+           *
+           * Reporting *every* offender matters too: the element that causes an
+           * overflow is often several levels below the one that first crosses the
+           * edge, and stopping at the first hit hides the cause.
+           */
+          const found: string[] = []
+          const label = (el: Element) => {
+            const cls = String(el.className || '')
+              .trim()
+              .slice(0, 60)
+            const text = (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)
+            return `<${el.tagName.toLowerCase()}${cls ? ` class="${cls}"` : ''}>${
+              text ? ` "${text}"` : ''
+            }`
+          }
+          for (const el of Array.from(document.querySelectorAll('body *'))) {
             const r = el.getBoundingClientRect()
             if (r.right > de.clientWidth + 0.5 && !el.closest('[class*="segment-scroll"]')) {
-              widest = `<${el.tagName.toLowerCase()} class="${String(el.className).slice(0, 50)}"> right=${r.right.toFixed(0)}`
-              break
+              found.push(`${label(el)} right=${r.right.toFixed(0)} w=${r.width.toFixed(0)}`)
             }
           }
-          return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth, widest }
+          // Deepest last in document order means the leaf is last, so reverse it:
+          // the innermost offender is the one to fix.
+          found.reverse()
+          return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth, offenders: found }
         })
 
         expect(
           scrollWidth,
-          `${route} overflows horizontally at ${width}px (scrollWidth ${scrollWidth} > clientWidth ${clientWidth}). Widest offender: ${widest}`,
+          `${route} overflows horizontally at ${width}px (scrollWidth ${scrollWidth} > clientWidth ${clientWidth}). Offenders, innermost first: ${offenders.join(' | ') || 'none found'}`,
         ).toBeLessThanOrEqual(clientWidth)
       }
     })
@@ -182,4 +207,42 @@ test.describe('layout â€” narrow phones', () => {
       expect(scrollWidth, `${route} overflows at 320px`).toBeLessThanOrEqual(clientWidth)
     })
   }
+})
+
+/**
+ * The header's overflow control.
+ *
+ * The bar scrolls away with the page rather than sticking — it did before this
+ * work and it should keep doing so, so there is nothing here about scroll
+ * behaviour to assert.
+ *
+ * What there *is* to assert is the one claim this redesign makes: the three
+ * maintenance screens are one tap away in a deliberate order. The order is the
+ * design decision, so it is asserted rather than left to a reader's eye.
+ */
+test.describe('app bar', () => {
+  authedTest('the setup screens are one tap away, in use-case order', async ({ signedIn }) => {
+    await signedIn.setViewportSize({ width: 390, height: 780 })
+    await signedIn.goto('/transactions')
+
+    // Below `md` there is no header nav at all — the bottom bar carries the four
+    // daily destinations — so this button is the only way to reach Budgets,
+    // Recurring and Categories without hunting through Account.
+    const more = signedIn.getByRole('button', { name: 'More sections' })
+    await expect(more).toBeVisible()
+    await more.click()
+
+    const sheet = signedIn.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+
+    // Budgets is checked weekly, Recurring when something looks wrong, Categories
+    // when the vocabulary stops matching reality. That ranking is the design.
+    await expect(sheet.getByRole('link')).toHaveText([/Budgets/, /Recurring/, /Categories/])
+
+    // And each one is a single link — the ADR-029 rule, in the place it is easiest
+    // to forget.
+    for (const link of await sheet.getByRole('link').all()) {
+      await expect(link).toHaveCount(1)
+    }
+  })
 })

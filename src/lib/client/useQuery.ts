@@ -1,7 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { hydrateCache, hydrateProfile, primeProfile, readThrough, type CachedValue } from './cache'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  hydrateCache,
+  hydrateProfile,
+  primeProfile,
+  readThrough,
+  subscribeToCache,
+  type CachedValue,
+} from './cache'
 
 /** Anything older than this is described as a sync time rather than presented live. */
 const STALE_AFTER_MS = 5 * 60_000
@@ -83,6 +90,48 @@ export function useQuery<T>(
     fetcherRef.current = fetcher
   })
 
+  /**
+   * One read, used by the first load and by every invalidation afterwards.
+   *
+   * `isCancelled` is a predicate rather than a flag so this can be shared by two
+   * effects with two different lifetimes: the mount effect can ask whether its own
+   * teardown has run, and the subscription below never has one.
+   */
+  const read = useCallback(
+    (isCancelled: () => boolean) => {
+      if (key === null) return
+      readThrough<T>(key, () => fetcherRef.current()).then(
+        (entry) => {
+          if (isCancelled()) return
+          // The profile is persisted separately and for good reason: every screen
+          // needs its timezone before it can resolve a date range (ADR-006), so an
+          // offline launch with no persisted profile cannot know today's date.
+          if (key === 'profile') primeProfile(entry.value as { timezone: string; currency: string })
+          setState({
+            key,
+            entry,
+            error: null,
+            // Computed once, on arrival. Doing it during render would mean the same
+            // tree could report a figure as fresh on one pass and stale on the next.
+            stale: Date.now() - entry.at > STALE_AFTER_MS,
+          })
+        },
+        (cause: unknown) => {
+          if (isCancelled()) return
+          // A failed load clears the entry rather than leaving a stale value next
+          // to an error, which is the pair a user cannot act on.
+          setState({
+            key,
+            entry: null,
+            error: cause instanceof Error ? cause.message : 'Could not load this',
+            stale: false,
+          })
+        },
+      )
+    },
+    [key],
+  )
+
   useEffect(() => {
     // No key yet: stay loading, and touch no state. Returning early here is also
     // what keeps this effect free of a synchronous `setState`.
@@ -91,40 +140,38 @@ export function useQuery<T>(
     let cancelled = false
     void hydrateCache()
     void hydrateProfile()
-
-    readThrough<T>(key, () => fetcherRef.current()).then(
-      (entry) => {
-        if (cancelled) return
-        // The profile is persisted separately and for good reason: every screen
-        // needs its timezone before it can resolve a date range (ADR-006), so an
-        // offline launch with no persisted profile cannot know today's date.
-        if (key === 'profile') primeProfile(entry.value as { timezone: string; currency: string })
-        setState({
-          key,
-          entry,
-          error: null,
-          // Computed once, on arrival. Doing it during render would mean the same
-          // tree could report a figure as fresh on one pass and stale on the next.
-          stale: Date.now() - entry.at > STALE_AFTER_MS,
-        })
-      },
-      (cause: unknown) => {
-        if (cancelled) return
-        // A failed load clears the entry rather than leaving a stale value next
-        // to an error, which is the pair a user cannot act on.
-        setState({
-          key,
-          entry: null,
-          error: cause instanceof Error ? cause.message : 'Could not load this',
-          stale: false,
-        })
-      },
-    )
+    read(() => cancelled)
 
     return () => {
       cancelled = true
     }
-  }, [key])
+  }, [key, read])
+
+  /**
+   * Re-read when the cache is invalidated. **This is what makes a write visible.**
+   *
+   * The effect above runs once per `key`, and a write changes no key — it changes
+   * what the key *means*. Without this subscription `invalidate()` clears the
+   * entry, `notify()` finds no listeners, and the screen carries on rendering what
+   * it already had until the user navigated. Every screen with client data had
+   * that: add an expense, the sheet closes, and the list underneath still shows the
+   * rows from before.
+   *
+   * The E2E suite could not see it, because every test that writes does a full
+   * `page.goto` afterwards. A navigation remounts the tree and re-reads, so the
+   * stale window closed before anything was asserted — the same blind spot as the
+   * three tests that passed without testing what their names claimed.
+   *
+   * This terminates rather than looping. `readThrough` notifies only when it
+   * *fetches*, and the read that notification triggers is a cache hit, which
+   * notifies nothing. A read already in flight returns the same promise instead of
+   * starting a second request. A read that fails does not notify at all, so a
+   * persistently failing query cannot spin.
+   */
+  useEffect(() => {
+    if (key === null) return
+    return subscribeToCache(() => read(() => false))
+  }, [key, read])
 
   // Anything recorded for a different key describes a screen the user has left.
   const mine = state?.key === key ? state : null

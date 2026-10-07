@@ -14,9 +14,20 @@
  */
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { wantsRemember, withRemember } from './remember'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
+
+  /**
+   * Read once, here, rather than inside `setAll`.
+   *
+   * `setAll` is where every session cookie is written *including refreshes*, so
+   * this is the only place that can keep "remember me" true past the first hour.
+   * Stamping a long expiry at sign-in and stopping there looks correct and stops
+   * working silently the first time auth-js rewrites the token.
+   */
+  const remember = wantsRemember(request.cookies.getAll())
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +43,7 @@ export async function updateSession(request: NextRequest) {
           }
           supabaseResponse = NextResponse.next({ request })
           for (const { name, value, options } of cookiesToSet) {
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, withRemember(name, options, remember))
           }
         },
       },

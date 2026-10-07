@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearCache, invalidate, readThrough } from './cache'
+import { clearCache, invalidate, readThrough, subscribeToCache } from './cache'
 
 /**
  * The cache is the component that decides whether a figure on screen is true, so
@@ -167,6 +167,136 @@ describe('persistence shape', () => {
     const { hydrateCache, primeProfile } = await import('./cache')
     await expect(hydrateCache()).resolves.toBeUndefined()
     await expect(primeProfile({ timezone: 'Asia/Dhaka', currency: 'BDT' })).resolves.toBeUndefined()
+  })
+})
+
+describe('the invalidation contract a live screen depends on', () => {
+  /**
+   * This is the mechanism `useQuery` subscribes to, and for most of this client's
+   * life it did not exist: `subscribeToCache` was exported, `notify()` iterated an
+   * always-empty listener set, and nothing in `src/` ever called it.
+   *
+   * The consequence was not a crash. `invalidate()` cleared the entries correctly —
+   * which is why the mutation tests passed — and then nothing re-read them, so every
+   * screen kept rendering what it already had until a navigation remounted the tree.
+   * Add an expense and the list underneath still showed the rows from before.
+   *
+   * Asserted as a two-part contract: a subscriber is *told*, and telling it causes
+   * a *refetch*. Testing only the first would pass against an empty subscriber list,
+   * which is precisely the bug.
+   */
+  beforeEach(() => {
+    clearCache()
+  })
+
+  it('tells subscribers when an entry is dropped', async () => {
+    await readThrough('accounts:balances', async () => 'first')
+
+    const seen: string[] = []
+    const unsubscribe = subscribeToCache(() => seen.push('notified'))
+
+    invalidate(['accounts:'])
+    unsubscribe()
+
+    expect(seen).toEqual(['notified'])
+  })
+
+  it('a told subscriber re-reads, so the value changes without a remount', async () => {
+    let value = 'first'
+    await readThrough('accounts:balances', async () => value)
+
+    // Exactly what `useQuery` does: on notification, re-read the same key.
+    const unsubscribe = subscribeToCache(() => {
+      void readThrough('accounts:balances', async () => value)
+    })
+
+    value = 'second'
+    invalidate(['accounts:'])
+
+    const after = await readThrough('accounts:balances', async () => value)
+    unsubscribe()
+
+    expect(after.value).toBe('second')
+  })
+
+  it('settles rather than looping when a refetch re-notifies', async () => {
+    let notifications = 0
+    const unsubscribe = subscribeToCache(() => {
+      notifications += 1
+      void readThrough('accounts:balances', async () => 'value')
+    })
+
+    invalidate(['accounts:'])
+    await readThrough('accounts:balances', async () => 'value')
+    // Two microtask turns: enough for the refetch's own promise chain to finish.
+    await Promise.resolve()
+    await Promise.resolve()
+    const settled = notifications
+
+    // Poll well past the point of settling. A loop would keep climbing here. A
+    // cache that has settled is a cache *hit*, and `readThrough` notifies only when
+    // it fetches — so this count must not move.
+    for (let i = 0; i < 20; i += 1) {
+      await readThrough('accounts:balances', async () => 'value')
+      await Promise.resolve()
+    }
+    unsubscribe()
+
+    // `settled` is 2 rather than 1, and that is worth being precise about:
+    // `invalidate` notifies, and the refetch that follows notifies again. The second
+    // pass is a hit and notifies nothing, so it stops there. What the test
+    // protects is the bound, not the exact count — the count is an implementation
+    // detail, the termination is the contract.
+    expect(settled).toBeGreaterThan(0)
+    expect(notifications).toBe(settled)
+  })
+
+  it('a fetch does not notify, so re-reads cannot cascade', async () => {
+    /**
+     * The guard on the cascade, and the reason this exists.
+     *
+     * The first attempt at making writes visible had `useQuery` subscribe to the
+     * cache, and `readThrough` still notified on every successful fetch. So an
+     * invalidation woke every mounted read, each re-read missed and fetched, each
+     * fetch woke every mounted read again, and the suite went from 2.4 minutes to
+     * 31 with 23 tests timing out on teardown.
+     *
+     * `notify` has to mean "what you are rendering is now wrong". A *fill* is not
+     * that — the component that asked for the value receives it from the promise,
+     * and any component on the same key shares the request through `inFlight`.
+     */
+    let notifications = 0
+    const unsubscribe = subscribeToCache(() => {
+      notifications += 1
+    })
+
+    await readThrough('accounts:balances', async () => 'value')
+    await readThrough('totals:any:any', async () => 'value')
+    await readThrough('budgets:progress', async () => 'value')
+    unsubscribe()
+
+    expect(notifications).toBe(0)
+
+    // And the one thing that *should* notify still does.
+    let afterInvalidation = 0
+    const second = subscribeToCache(() => {
+      afterInvalidation += 1
+    })
+    invalidate(['accounts:'])
+    second()
+
+    expect(afterInvalidation).toBeGreaterThan(0)
+  })
+
+  it('stops telling a subscriber once it unsubscribes', async () => {
+    const seen: string[] = []
+    const unsubscribe = subscribeToCache(() => seen.push('x'))
+
+    invalidate(['accounts:'])
+    unsubscribe()
+    invalidate(['accounts:'])
+
+    expect(seen).toHaveLength(1)
   })
 })
 

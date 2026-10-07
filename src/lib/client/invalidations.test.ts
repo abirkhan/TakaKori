@@ -129,6 +129,73 @@ describe('key shape', () => {
       keys.totals('Asia/Dhaka', '2026-11-01', '2026-11-30'),
     )
   })
+
+  it('gives every transaction-list page its own key', () => {
+    // The one failure this guards: `offset` dropped from the key, so page 2 is
+    // served page 1's rows. The heading still says "Latest 50" and every row is a
+    // real transaction, so nothing looks wrong — the user is simply reading a page
+    // they already read.
+    const base = { timezone: 'Asia/Dhaka', from: '2026-10-01', to: '2026-10-31', limit: 50 }
+    expect(keys.transactionList({ ...base, offset: 0 })).not.toBe(
+      keys.transactionList({ ...base, offset: 50 }),
+    )
+    expect(keys.transactionList({ ...base, offset: 0 })).not.toBe(
+      keys.transactionList({ ...base, offset: 100 }),
+    )
+  })
+
+  it('separates every filter the list can be narrowed by', () => {
+    const base = {
+      timezone: 'Asia/Dhaka',
+      from: '2026-10-01',
+      to: '2026-10-31',
+      limit: 50,
+      offset: 0,
+    }
+    const seen = new Set<string>()
+
+    // Each variant differs from the unfiltered base in exactly one input, so a key
+    // that failed to encode any of them would collide with the base.
+    const variants = [
+      keys.transactionList(base),
+      keys.transactionList({ ...base, type: 'expense' }),
+      keys.transactionList({ ...base, type: 'income' }),
+      keys.transactionList({ ...base, categoryId: 'cat-1' }),
+      keys.transactionList({ ...base, accountId: 'acc-1' }),
+      keys.transactionList({ ...base, from: '2026-09-01' }),
+      keys.transactionList({ ...base, to: '2026-09-30' }),
+      keys.transactionList({ ...base, limit: 20 }),
+      // "All time" has no bounds, and must not collide with a bounded range.
+      keys.transactionList({ timezone: 'Asia/Dhaka', limit: 50, offset: 0 }),
+    ]
+    for (const key of variants) seen.add(key)
+
+    expect(seen.size).toBe(variants.length)
+  })
+
+  it('separates the same filter values in different timezones', () => {
+    // ADR-006. `?preset=month` resolves differently in Dhaka and London, and the
+    // two are different questions about the ledger.
+    const args = { from: '2026-10-01', to: '2026-10-31', limit: 50, offset: 0 }
+    expect(keys.transactionList({ ...args, timezone: 'Asia/Dhaka' })).not.toBe(
+      keys.transactionList({ ...args, timezone: 'Europe/London' }),
+    )
+  })
+
+  it('clears the transaction list on a transaction write', () => {
+    // Posting, editing or deleting a transaction changes the list itself. Without
+    // `transactions:` in the write, a newly added row is absent from the screen
+    // the user is looking at.
+    const key = keys.transactionList({
+      timezone: 'Asia/Dhaka',
+      from: '2026-10-01',
+      to: '2026-10-31',
+      limit: 50,
+      offset: 50,
+    })
+    expect(key.startsWith(PREFIX.transactions)).toBe(true)
+    expect(WRITES.transaction).toContain(PREFIX.transactions)
+  })
 })
 
 describe('the write map', () => {

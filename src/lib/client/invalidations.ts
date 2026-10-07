@@ -79,6 +79,52 @@ export const keys = {
   transactions: (qualifier: string): string => `${PREFIX.transactions}${qualifier}`,
 
   /**
+   * The `/transactions` list, keyed by every input its query depends on.
+   *
+   * **This takes an object rather than a qualifier string, and that is the whole
+   * point.** The list is the one read in this app with eight independent inputs —
+   * timezone, both ends of the range, four filters, page size and offset. Pass
+   * them as positional arguments and nothing catches a forgotten one: `offset` is
+   * the last, so it is the one that gets dropped, and then page 2 is served page
+   * 1's rows. Nothing looks wrong. The heading says "Latest 50", the rows are
+   * plausible, and the user is looking at transactions they already saw — the
+   * ADR-012 shape again, reached by paging.
+   *
+   * With an object, omitting `offset` is a type error. There is no ordering to get
+   * wrong and no way to silently leave one input out.
+   *
+   * `timezone` is carried rather than derived because the range it produces is the
+   * user's, not the server's (ADR-006): the same `?preset=month` is a different
+   * range in Dhaka than in London, and the key has to say which one was used.
+   *
+   * Absent values are written as `any` rather than `*`, because `*` is the prefix
+   * `invalidate()` matches on and a wildcard sitting inside a key is a trap for
+   * whoever reads this next.
+   */
+  transactionList: (input: {
+    timezone: string
+    from?: string
+    to?: string
+    type?: string
+    categoryId?: string
+    accountId?: string
+    limit: number
+    offset: number
+  }): string => {
+    const part = (v: string | undefined) => v ?? 'any'
+    return [
+      `${PREFIX.transactions}list`,
+      part(input.timezone),
+      `${part(input.from)}..${part(input.to)}`,
+      part(input.type),
+      part(input.categoryId),
+      part(input.accountId),
+      `n${input.limit}`,
+      `o${input.offset}`,
+    ].join(':')
+  },
+
+  /**
    * Keyed by timezone as well as range, because two ranges computed in different
    * zones are different ranges — a transaction filed at 00:30 local belongs to a
    * different month in Dhaka than in London (ADR-006).

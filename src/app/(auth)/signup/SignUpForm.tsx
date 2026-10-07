@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { signUp, type ActionState } from '../actions'
 import { Alert } from '@/components/ui/Alert'
 import { PasswordField, TextField } from '@/components/ui/Field'
@@ -9,6 +9,19 @@ import { buttonClass } from '@/components/ui/button'
 
 export function SignUpForm() {
   const [state, formAction, pending] = useActionState<ActionState, FormData>(signUp, {})
+
+  /**
+   * Controlled, for the same reason as the sign-in form and with more to lose.
+   *
+   * React resets uncontrolled fields when a `useActionState` action resolves,
+   * including on failure. This form's most likely failure is "that email is
+   * already registered" or a password under 8 characters — and the version before
+   * this answered either by clearing the name, the address *and* the password, so
+   * the user retype the one thing they could not look up.
+   */
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
   if (state.success) {
     return (
@@ -37,6 +50,8 @@ export function SignUpForm() {
         autoComplete="name"
         placeholder="Abir Hossain"
         required
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)}
         error={state.fieldErrors?.fullName}
       />
 
@@ -47,6 +62,8 @@ export function SignUpForm() {
         autoComplete="email"
         placeholder="you@example.com"
         required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
         error={state.fieldErrors?.email}
       />
 
@@ -56,6 +73,8 @@ export function SignUpForm() {
         autoComplete="new-password"
         minLength={8}
         required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
         hint="At least 8 characters"
         error={state.fieldErrors?.password}
       />

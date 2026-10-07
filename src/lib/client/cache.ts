@@ -108,11 +108,28 @@ export async function hydrateCache(): Promise<void> {
 /**
  * Reads through the cache.
  *
- * Returns whatever is available and only then goes to the network:
+ * Resolution order:
  *
  *   1. memory — this tab, just fetched
- *   2. IndexedDB — a previous session, possibly offline
- *   3. the fetcher — which throws if it fails, leaving 1 and 2 intact
+ *   2. IndexedDB — a previous session
+ *   3. the fetcher
+ *
+ * **A persisted snapshot is a fallback, not a result.** Order 2 used to return
+ * immediately, and that was a live bug: `invalidate` drops entries from IndexedDB
+ * in a fire-and-forget chain (`import` → `idbAll` → `idbDelete`), so a reload
+ * landing inside that window re-hydrated the entry the write had just removed.
+ * The new document then served it and — because it returned at step 2 — never asked
+ * the network for the rest of the session. Add ৳123.45, reload, and the balance is
+ * the pre-write figure, indefinitely. That is the ADR-012 failure mode, produced by
+ * the layer written to prevent it.
+ *
+ * So while the browser reports itself online, a cold entry is a *fallback for when
+ * the fetch fails*, not a shortcut around it. Offline, it is the answer, because
+ * there is no question to ask.
+ *
+ * The cost is that a reload no longer paints instantly from the snapshot; it waits
+ * for the network the way any other page load does, and falls back if the network
+ * is not there. Correct beats fast for a balance.
  *
  * The signature is `CachedValue | null` rather than the value alone because the
  * caller must be able to tell the user how old the figure is. Returning a bare
@@ -127,7 +144,13 @@ export async function readThrough<T>(
   if (hot) return hot as CachedValue<T>
 
   const cold = fromDisk.get(key)
-  if (cold) {
+
+  // Offline, the snapshot is the answer. Tested as `=== false` rather than `!` on
+  // purpose: `navigator.onLine` is a hint, not a guarantee — it says a network
+  // interface exists, not that anything is reachable — and it is absent entirely
+  // outside a browser. Only an explicit `false` is worth skipping a request over;
+  // anything else tries the network and falls back to `cold` if it fails.
+  if (cold && typeof navigator !== 'undefined' && navigator.onLine === false) {
     memory.set(key, cold)
     return cold as CachedValue<T>
   }
@@ -143,9 +166,30 @@ export async function readThrough<T>(
     .then((value) => {
       const entry: CachedValue<T> = { value, at: Date.now() }
       memory.set(key, entry)
-      notify()
+      // **No `notify()` here, and that is load-bearing.**
+      //
+      // `notify` means "what you are rendering is now wrong" — only an invalidation
+      // or a sign-out makes that true. A *fill* does not: the caller that asked for
+      // this value receives it from the returned promise, and any other component on
+      // the same key shares the request through `inFlight` and receives the same one.
+      //
+      // Notifying on fetch is what turned the live-screen fix into a cascade. Each
+      // subscriber's re-read missed, fetched, notified, and re-woke every other
+      // subscriber — with five mounted reads on a screen, a 33-test suite took 31
+      // minutes and 23 of them timed out on teardown.
+      //
+      // With notification on invalidation alone, one write is one notify and each
+      // subscriber re-reads once. A re-read that misses fetches and stays silent, so
+      // the system terminates by construction rather than by argument.
       void import('@/lib/client/idb').then(({ idbSet }) => idbSet('cache', key, [key, entry]))
       return entry
+    })
+    .catch((cause: unknown) => {
+      // The network is unreachable or the query failed. A snapshot still beats an
+      // empty screen, and `stale` is computed from its own timestamp, so the caller
+      // can say how old it is.
+      if (cold) return cold as CachedValue<T>
+      throw cause
     })
     .finally(() => {
       inFlight.delete(key)
@@ -208,7 +252,10 @@ export async function primeProfile(profile: { timezone: string; currency: string
   profileCache = entry
   memory.set('profile', entry as CachedValue<unknown>)
   fromDisk.set('profile', entry as CachedValue<unknown>)
-  notify()
+  // Silent, like a fill. `primeProfile` runs on every successful profile read, and
+  // it writes the very key the reader is holding — so notifying here would wake
+  // every mounted read on the screen to re-read a cache that was just correctly
+  // filled. The profile's own reader already has the value.
   void import('@/lib/client/idb').then(({ idbSet }) =>
     idbSet('cache', 'profile', ['profile', entry]),
   )

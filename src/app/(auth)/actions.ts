@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { REMEMBER_COOKIE, rememberCookieOptions, rememberFromForm } from '@/lib/supabase/remember'
 import { siteUrl } from '@/lib/site-url'
 
 /**
@@ -100,6 +102,23 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
     return { fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string> }
   }
 
+  /**
+   * The preference is written **before** `createClient()`.
+   *
+   * This ordering is load-bearing and not obvious. `createClient` reads
+   * `tk.remember` when it is constructed, because that is where it learns whether
+   * to stamp a 30-day life onto the session cookies auth-js is about to write. Set
+   * it afterwards and the first sign-in silently ignores the checkbox — the kind of
+   * bug that reads as "remember me just doesn't work" with nothing in the logs.
+   *
+   * A failed sign-in still persists the preference, which is deliberate: a user
+   * who mistypes their password and had ticked the box should not have to tick it
+   * again on the retry.
+   */
+  const remember = rememberFromForm(formData)
+  const cookieStore = await cookies()
+  cookieStore.set(REMEMBER_COOKIE, remember ? '1' : '0', rememberCookieOptions())
+
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword(parsed.data)
 
@@ -116,6 +135,13 @@ export async function signIn(_prev: ActionState, formData: FormData): Promise<Ac
 export async function signOut(): Promise<void> {
   const supabase = await createClient()
   await supabase.auth.signOut()
+
+  // The preference goes too. Leaving it would mean the *next* sign-in defaults to
+  // persistent on a machine whose owner had deliberately switched it off, with
+  // nothing on screen explaining why.
+  const cookieStore = await cookies()
+  cookieStore.delete(REMEMBER_COOKIE)
+
   revalidatePath('/', 'layout')
   redirect('/login')
 }

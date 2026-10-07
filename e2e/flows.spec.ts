@@ -121,6 +121,121 @@ authedTest('the dashboard renders a balance', async ({ signedIn }) => {
   await expect(signedIn.getByText(/৳[\d,]+\.\d{2}/).first()).toBeVisible()
 })
 
+writingTest('the list shows a new transaction without reloading', async ({ signedIn }) => {
+  /**
+   * The one this suite could not see.
+   *
+   * `subscribeToCache` was exported from the cache and called by nothing, so
+   * `invalidate()` dropped the entry and no mounted `useQuery` re-read it. Every
+   * other write test here navigates afterwards — `readTotalBalance` does a
+   * `page.goto('/dashboard')` — and a navigation remounts the tree and re-reads, so
+   * the stale window closed before a single assertion ran. The bug was invisible
+   * to all of them and obvious to a user.
+   *
+   * So this test asserts the update **in place**: no `goto`, no reload, and the
+   * same page instance that opened the sheet has to show the new row.
+   */
+  await signedIn.goto('/transactions')
+  await expect(signedIn.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+
+  const form = await openAddSheet(signedIn)
+  await field(form, 'amount').fill('77.00')
+  await field(form, 'accountId').selectOption({ label: 'Cash' })
+  await field(form, 'categoryId').selectOption({ label: 'Food' })
+  await field(form, 'description').fill(`${MARKER} in-place`)
+  await form.getByRole('button', { name: 'Save transaction' }).click()
+
+  // Still on the same document: no navigation has been asked for anywhere above.
+  await expect(signedIn).toHaveURL(/\/transactions(\?|$)/)
+  await expect(signedIn.getByText(`${MARKER} in-place`).first()).toBeVisible({
+    timeout: 20_000,
+  })
+})
+
+writingTest('a completed write says so, then gets out of the way', async ({ signedIn }) => {
+  /**
+   * The absence that prompted all of this. Every write in the app was silent: add
+   * an expense and the sheet closed, delete a row and it went away. Nothing said
+   * anything. For a ledger that is not terseness — a save that fails and a save
+   * that lands look identical, so the user's only way to find out is to go looking.
+   *
+   * Three things are asserted, because a message that is merely *present* is half
+   * the feature:
+   *
+   * 1. it appears, and says which kind of transaction was filed — "Transaction
+   *    saved" tells someone who just moved money between accounts nothing;
+   * 2. it is polite, not assertive — `Alert` gives only its error tone
+   *    `role="alert"`, because an immediate announcement interrupts a
+   *    screen-reader user mid-flow;
+   * 3. it leaves. A confirmation that does not disappear is a banner, and it would
+   *    push down the list the user had just written to.
+   */
+  await signedIn.goto('/transactions')
+
+  // Nothing has been written yet, so there is nothing to say.
+  await expect(signedIn.getByTestId('toast')).toHaveCount(0)
+
+  const form = await openAddSheet(signedIn)
+  await field(form, 'amount').fill('64.00')
+  await field(form, 'accountId').selectOption({ label: 'Cash' })
+  await field(form, 'categoryId').selectOption({ label: 'Food' })
+  await field(form, 'description').fill(`${MARKER} confirmed`)
+  await form.getByRole('button', { name: 'Save transaction' }).click()
+
+  const toast = signedIn.getByTestId('toast')
+  await expect(toast).toBeVisible({ timeout: 20_000 })
+  await expect(toast).toContainText('Expense saved.')
+  await expect(toast).toHaveAttribute('data-tone', 'success')
+  // Polite: a success must not carry `role="alert"`.
+  await expect(toast).not.toHaveAttribute('role', 'alert')
+
+  // Leaves on its own. Generous enough not to be a race — and it never expires
+  // while hovered or focused, so a long unattended wait here is also what proves
+  // the timer is running rather than the toast simply being permanent.
+  await expect(toast).toHaveCount(0, { timeout: 15_000 })
+})
+
+writingTest(
+  'the toast does not swallow taps meant for the list beneath it',
+  async ({ signedIn }) => {
+    /**
+     * The toast layer spans the full width of the screen so it can centre the toast.
+     * Without `pointer-events: none` on the layer it would intercept every tap aimed
+     * at the rows underneath — on the Transactions screen, the list the user had
+     * just written to, which is the one place a stray transparent overlay does the
+     * most damage.
+     *
+     * Asserted by opening the row's action menu: if the layer ate the tap, the menu
+     * would never appear.
+     */
+    await signedIn.goto('/transactions')
+    await expect(signedIn.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+
+    const form = await openAddSheet(signedIn)
+    await field(form, 'amount').fill('31.00')
+    await field(form, 'accountId').selectOption({ label: 'Cash' })
+    await field(form, 'categoryId').selectOption({ label: 'Food' })
+    await field(form, 'description').fill(`${MARKER} tap-through`)
+    await form.getByRole('button', { name: 'Save transaction' }).click()
+
+    // The toast is on screen for the whole of this window.
+    await expect(signedIn.getByTestId('toast')).toBeVisible({ timeout: 20_000 })
+
+    // The row's own action button — *not* its title, which is text rather than a
+    // tap target. Clicking the title would pass whether or not the layer was in the
+    // way, so it would have proved nothing about this.
+    const row = signedIn
+      .locator('li')
+      .filter({ has: signedIn.locator('[data-row-title]') })
+      .filter({ hasText: `${MARKER} tap-through` })
+      .first()
+    await row.getByRole('button', { name: /^Actions for/ }).click()
+
+    // The row's own sheet opened, so the tap got through.
+    await expect(signedIn.getByRole('dialog')).toBeVisible()
+  },
+)
+
 writingTest('creating an expense decreases the total balance', async ({ signedIn }) => {
   const before = await readTotalBalance(signedIn)
 

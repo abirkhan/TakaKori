@@ -6,27 +6,35 @@ app to a client-data single-page app with offline reads; see
 [`decisions.md`](./decisions.md) ADR-032 through ADR-037 for what has been
 decided since.
 
-That programme is **partway through and not yet safe to ship on its own**:
+The **read** half of that programme is done. The write half is not.
 
-| Step                                      | State                                                   |
-| ----------------------------------------- | ------------------------------------------------------- |
-| Installable PWA (icons, manifest, prompt) | Done, and the prompt's engagement gate was restored     |
-| Transport-agnostic query layer            | Done — `lib/queries/` reads on either transport         |
-| Client data on `/dashboard`, `/accounts`  | Done                                                    |
-| Cache invalidation map                    | Done, and it caught a live stale-balance bug on the way |
-| Writes clear the cache                    | Done — every mutating action now returns a result       |
-| Client data on the other five screens     | **Not started**                                         |
-| Offline writes (outbox)                   | **Deliberately not started** — see below                |
+| Step                                      | State                                                    |
+| ----------------------------------------- | -------------------------------------------------------- |
+| Installable PWA (icons, manifest, prompt) | Done, and the prompt's engagement gate was restored      |
+| Transport-agnostic query layer            | Done — `lib/queries/` reads on either transport          |
+| Cache invalidation map                    | Done, and it caught a live stale-balance bug on the way  |
+| Client data on **all seven** screens      | Done — no screen reads through `queries/server` any more |
+| Writes clear the cache                    | Done — every mutating action now returns a result        |
+| Mutations run in the client               | **Not started** — see below                              |
+| Offline writes (outbox)                   | **Deliberately not started** — see below                 |
 
-**The two things worth knowing before touching this area again:**
+**Three things worth knowing before touching this area again:**
 
-Both the dashboard and the account screen were moved to client data _before_ the
-writes that could invalidate them. For a window of commits, a purchase wrote its
-row and the dashboard kept showing the balance from before it. That is now
-closed — `useWriteInvalidation` is wired into all eleven call sites — but it is
-the reason the order mattered, and the reason the outbox has to wait. Queuing
-writes against unverified read-invalidation is worse than having no offline
+The read path was converted _before_ the writes that could invalidate it. For a
+window of commits a purchase wrote its row and the dashboard kept showing the
+balance from before it. That is closed — `useWriteInvalidation` is wired into all
+eleven call sites — but it is why the order mattered, and why the outbox waits.
+Queuing writes against unverified read-invalidation is worse than having no offline
 support at all.
+
+**Two screens no longer render without JavaScript.** `/reports` and
+`/transactions` put their whole body in one client component, because their
+content is aggregates and rows whose date range is resolved from the profile's
+timezone — a browser read now. Splitting the header out and leaving the figures
+behind would give a screen with a period selector and no data under it, which
+reads as broken rather than unavailable. The other five keep a prerendered shell,
+and their Add links, filter controls and export are real `<a>` and `<Link>`
+elements, so the paths in still work without a bundle.
 
 **Not verified, and not verifiable from a dev machine:** a real Google OAuth
 round-trip (needs interactive consent), true offline navigation (needs network
@@ -42,7 +50,7 @@ emulation), and Netlify headers (deploy-time only).
 - [x] `lib/dates.ts` with timezone-aware range resolution
 - [x] `lib/validations.ts` Zod schemas
 - [x] `lib/auth.ts` session guards
-- [x] 49 unit tests
+- [x] 49 unit tests (178 as of the client-data programme — see above)
 - [x] `npm run verify` green (typecheck, lint, test, build)
 - [x] Documentation, 6 agent skills, `AGENTS.md`
 - [ ] **`supabase login` + `supabase db push`** — needs interactive login

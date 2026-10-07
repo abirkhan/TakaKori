@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { rememberCookieString } from '@/lib/supabase/remember'
 import { GoogleMark } from '@/components/ui/GoogleMark'
 import { buttonClass } from '@/components/ui/button'
 
@@ -44,7 +45,14 @@ import { buttonClass } from '@/components/ui/button'
  * survives the provider round-trip without a custom state parameter to keep in
  * step.
  */
-export function GoogleSignIn({ next = '/dashboard' }: { next?: string }) {
+export function GoogleSignIn({
+  next = '/dashboard',
+  remember = true,
+}: {
+  next?: string
+  /** The sign-in form's "keep me signed in" checkbox. See the note below. */
+  remember?: boolean
+}) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -54,6 +62,22 @@ export function GoogleSignIn({ next = '/dashboard' }: { next?: string }) {
     setError(null)
 
     startTransition(async () => {
+      /**
+       * The preference, written from the browser because this flow never touches
+       * the server's cookie writer.
+       *
+       * `proxy.ts` reads `tk.remember` and stamps the session cookies on every
+       * write, so setting it here means the preference is already in place by the
+       * time the callback route's request passes through the proxy — the same
+       * mechanism the password path uses, reached from the other side.
+       *
+       * Best-effort by nature: the browser Supabase client writes its own session
+       * cookie with `document.cookie` and nothing can add a lifetime to that
+       * particular write. It is corrected on the proxy's next rewrite, which is the
+       * first server-rendered request after the callback.
+       */
+      document.cookie = rememberCookieString(remember)
+
       const supabase = createClient()
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',

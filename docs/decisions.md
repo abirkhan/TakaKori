@@ -1025,3 +1025,145 @@ call sites today and all eleven will be deleted together, not one at a time.
 works with JavaScript unavailable. What degrades without JS is the _message_:
 React renders the returned state only on the client. That is a smaller loss than
 what it replaced, which showed nothing at all in every case.
+
+## ADR-039 - "Keep me signed in" is a cookie lifetime applied on every write
+
+A Supabase session is two cookies, and `@supabase/ssr` writes them with whatever
+lifetime auth-js hands it — which means a **session cookie**, gone when the browser
+closes. That is right for a shared machine and wrong for a phone.
+
+### The naive version breaks silently, an hour in
+
+Stamping a 30-day expiry at sign-in looks like it works. Then auth-js refreshes the
+token, rewrites the cookie with the default short lifetime, and "remember me"
+quietly stops remembering — for most users, with nothing in the logs and nothing on
+screen. A feature that fails an hour after it is introduced, only sometimes, is
+worse than one that was never offered.
+
+So the preference lives in its own cookie (`tk.remember`) and is applied on **every**
+write, including refreshes. That is why `proxy.ts` takes part even though sign-in
+happens in a Server Action: the refresh is the only place the lifetime is decided
+again, so it is the only place that can keep the promise.
+
+### "Not remembering" has to remove the expiry, not shorten it
+
+auth-js supplies `expires` alongside `maxAge` for the access token, and a cookie
+with a future `expires` is persistent whatever its `maxAge` says. Stripping only
+`maxAge` leaves an unchecked box still keeping people signed in. `withRemember`
+deletes both keys.
+
+### Two sign-in paths, one preference
+
+The Google flow runs entirely in the browser (ADR-036) and never touches the
+server's cookie writer, so `GoogleSignIn` writes `tk.remember` itself before
+redirecting. Leaving the checkbox uncontrolled would have let the two paths
+disagree — tick the box, sign in with Google, get a session cookie anyway — which
+is why `SignInForm` holds it in state and passes it down.
+
+The Google path is **best-effort**: the browser Supabase client writes its own
+session cookie with `document.cookie` and nothing can add a lifetime to that
+particular write. It is corrected on the proxy's next rewrite, which is the first
+server-rendered request after the callback. Password sign-in is reliable.
+
+`tk.remember` is deliberately **not** `httpOnly`. It holds no secret — `"1"` or
+`"0"` — and the OAuth path has to be able to write it. The session cookies stay
+`httpOnly`; auth-js does that and this module does not touch it.
+
+### Defaulting to checked
+
+A finance app defaulting to _not_ remembering is the more usual call, and this is
+the one place that choice was made the other way: this is a personal tracker that
+people install to their own phone and use on a metered connection, where being
+signed out every few days is a real and repeated cost. It is one line to flip in
+`SignInForm`, and it is flagged here because it is a judgement rather than a fact.
+
+## ADR-040 - The header carries four destinations; the rest live behind one control
+
+The desktop header listed all seven destinations flat. That is a menu, not
+navigation: at 360px it wraps, and it treats a screen checked weekly the same as one
+tidied twice a year.
+
+Two changes, and only two:
+
+**Four pills, and one overflow control.** The header now carries the same four as
+the tab bar — Home, Transactions, Analytics, Account — so a destination is in the
+same place on every screen size rather than moving at `md`. The three maintenance
+destinations move into a sheet opened by a single control.
+
+**That control shows at every width, including below `md`.** It looks redundant
+beside a bottom tab bar carrying the same four, and it is the point: on a phone
+those three screens were reachable _only_ by scrolling to Account and finding them
+there, which made the tab bar look like the whole application. One button puts them
+a tap away without adding a fifth tab, which the four-tab ceiling rules out.
+
+### The order is the decision
+
+The overflow lists **Budgets, Recurring, Categories**:
+
+1. **Budgets** — a limit is set once and checked against often. "Am I over?" is the
+   reason to open it.
+2. **Recurring** — salary and subscriptions; consulted when something looks wrong
+   or is due to change.
+3. **Categories** — the vocabulary, corrected when it stops matching reality. Rare
+   by design.
+
+It was alphabetical-ish, which is not an ordering. `layout.spec.ts` asserts the
+sequence, because a ranking that is only argued for in a comment will drift.
+
+### What was tried and rejected
+
+A sticky bar that condensed on scroll. It measured correctly — the bar's height was
+identical in both states, so nothing below it moved — and it was still wrong: it put
+a navigation bar over the content while someone was halfway down a fifty-row
+transaction list. The bar scrolls away with the page, as it always did.
+`AppHeader` and its scroll listener were deleted rather than left disabled, and the
+two tests that covered them went with them.
+
+## ADR-038 - Write feedback is a toast, except where a modal is open
+
+Every write in this app was silent. Add an expense and the sheet closed; delete a
+row and it went away. For most software that is merely terse. For a ledger it is a
+hazard: a save that fails and a save that lands look identical, so the user's only
+way to find out is to go looking.
+
+The first implementation was a banner in normal flow above the content — never
+`fixed`, permanent, dismissed by hand. That was wrong on the second count. A
+confirmation that never leaves pushes the content down to make room for a sentence
+about something that has already succeeded, and it does that on every screen. So
+the default is now a **toast**: fixed above the tab bar, auto-dismissed.
+
+What stops the toast from becoming the failure mode it looks like:
+
+| Hazard                                          | Answer                                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| Message expires unread                          | Pauses while hovered **or** focused; grants full time again                  |
+| Cannot outrun the reader                        | A close button, so it is never purely time-dependent                         |
+| User misses the only record that a write failed | Errors live twice as long as successes (`DURATION`)                          |
+| Two writes in quick succession                  | The second replaces the first; never a stack or a queue                      |
+| Announcement lands on a node appearing          | The live region is always mounted; the message is injected into it           |
+| Screen reader interrupted on success            | The region is `role="status"` (polite); only an error carries `role="alert"` |
+
+The **one** place this does not apply, and the reason is physical rather than
+stylistic: **a toast is behind a modal backdrop.** `AddTransactionSheet`,
+`EditTransactionSheet` and `ConfirmDeleteSheet` all stay open when a write is
+rejected, so that the message can be read beside the field that caused it — and a
+`z-index: 50` toast is not on screen while they are. Those errors therefore stay
+inline inside the sheet. Toasting them would be strictly worse than the bug ADR-037
+was written to fix, which was a failed delete returning to a clean page and saying
+nothing.
+
+Two further decisions inside it:
+
+- **A store, not context.** Same reasoning as `useInstall`: the writes that need
+  reporting are Server Actions fired from forms, sheets and buttons across five
+  screens, several through portals. A store needs no provider and no call-site
+  wrapping, so a write cannot fail to announce itself because someone forgot to
+  put a component above it.
+- **The layer is `pointer-events: none`; only the toast is not.** The layer spans
+  the screen so it can centre the toast, and without this it would swallow every
+  tap aimed at the rows underneath — on the Transactions screen, the list the user
+  had just written to.
+
+`sheets.spec.ts`'s "a rejected save keeps the sheet open with the input intact" is
+the test that pins the exception, and `flows.spec.ts` pins the rest: that a
+confirmation appears, is polite, goes away on its own, and does not intercept taps.

@@ -1,9 +1,10 @@
 'use client'
 
-import { useActionState, useEffect, type ReactNode } from 'react'
+import { useActionState, useEffect, useRef, type ReactNode } from 'react'
 import { Modal } from './Modal'
 import { buttonClass } from './button'
 import { Alert } from './Alert'
+import { notifySuccess } from '@/components/app/Toast'
 import type { ActionState } from '@/actions/transactions'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
@@ -38,6 +39,7 @@ export function ConfirmDeleteSheet({
   kind,
   hidden,
   confirmLabel = 'Delete',
+  savedMessage = 'Deleted.',
   children,
 }: {
   open: boolean
@@ -51,6 +53,12 @@ export function ConfirmDeleteSheet({
   /** Row identity, posted with the delete. */
   hidden?: Record<string, string>
   confirmLabel?: string
+  /**
+   * What to say once the record is gone. Defaults to the truthful minimum;
+   * call sites name the record, because "Deleted." leaves the user wondering
+   * which of the things they just changed was the one that changed.
+   */
+  savedMessage?: string
   /** Extra context, e.g. the record's own amount. */
   children?: ReactNode
 }) {
@@ -59,6 +67,30 @@ export function ConfirmDeleteSheet({
   // Clears the cache at the moment of the write. Without it a deleted
   // transaction leaves its own amount in the total balance until a hard reload.
   useWriteInvalidation(state.success, kind)
+
+  /**
+   * Success toasts; failure does not, and that is not an oversight.
+   *
+   * This sheet **stays open when the delete fails**, so that the user can read
+   * why and try again. A toast is a `z-index: 50` element behind a modal
+   * backdrop — while this sheet is open it is simply not on screen. A failure
+   * message the user cannot see is exactly the bug ADR-037 exists to prevent, so
+   * the error stays inline below, where it is rendered *inside* the sheet.
+   *
+   * The toast is raised for the same reason the sheet closes: the success toast
+   * appears once the sheet is gone, and the announcement is issued a beat before
+   * that so assistive technology hears it.
+   *
+   * Refs for the one-shot guards, not state: `setState` inside an effect cascades
+   * a render, which `react-hooks/set-state-in-effect` exists to reject.
+   */
+  const announced = useRef(false)
+  useEffect(() => {
+    if (!state.success) return
+    if (announced.current) return
+    announced.current = true
+    notifySuccess(savedMessage)
+  }, [state.success, savedMessage])
 
   // Close only once the delete has actually succeeded, so a failure leaves the
   // sheet open next to the message explaining why. Calling the prop rather than

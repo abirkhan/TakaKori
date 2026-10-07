@@ -363,10 +363,32 @@ about:
 - **Nothing in here is `fixed`.** The wash, the floating action button and the tab
   bar already compete for the edges of a screen, and ADR-031 measured 113
   controls sitting under a bar. Chrome sits in normal flow and pushes content
-  down rather than covering it.
+  down rather than covering it. **The one exception is the toast** — see below.
 - **A banner never lands over a sheet.** ADR-030 says the list owns a tab
   screen; a sheet is in the top layer, so chrome behind it is inert and the user
   meets it after dismissing, which is the right order.
+
+### The one overlay: the toast
+
+A transient "Expense saved." is the only thing in this app that floats, and it is
+`fixed` on purpose. Everything above pushes content down instead of covering it,
+which is right for chrome that is _there_ — and wrong for a message about something
+that already finished, because reserving 56px of every screen for a receipt is a
+tax on all the other reads.
+
+Four things keep it from becoming the hazard ADR-031 measured:
+
+- **The layer is `pointer-events: none`; only the toast is not.** It spans the full
+  width so it can centre, and without this it would swallow every tap aimed at the
+  list underneath — on Transactions, the list the user had just written to.
+- **It never expires while hovered or focused,** and it has a close button. A
+  message that can be missed is the same as no message.
+- **It is `position: fixed` above `--nav-clear`, not over the tab bar**, so the bar
+  stays usable while a toast is up. `--nav-clear` is the token that already tracks
+  the bar's height, so the two cannot drift apart.
+- **It cannot be seen through a sheet**, and that is why write _failures_ inside a
+  sheet render inline instead. A `z-index: 50` toast behind a modal backdrop is
+  worse than silence.
 - **Offline is ordinary, not an incident.** TakaKori's users are on metered
   connections, so being offline is a normal state here and gets the informational
   tone. A banner that cries wolf about a condition its audience lives in teaches

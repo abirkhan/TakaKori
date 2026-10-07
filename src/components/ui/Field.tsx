@@ -168,3 +168,74 @@ export function SelectField({
     </div>
   )
 }
+
+/**
+ * A checkbox, for the one place this app needs one.
+ *
+ * **A real `<input type="checkbox">` at 22px, not a styled `<div>` with a hidden
+ * input.** Rule 7 forbids any field computing under 16px — iOS zooms on focus and
+ * never zooms back out, which leaves the tab bar sitting over the content and the
+ * page scrollable sideways. That rule exists because `sr-only` inputs are the usual
+ * way this goes wrong, so the honest way to satisfy it is to not hide the input at
+ * all. A native checkbox also brings the platform's own keyboard and screen-reader
+ * behaviour for free, which a `role="checkbox"` div would have to re-derive.
+ *
+ * The label wraps the input rather than sitting beside it with a `for`, so the
+ * whole row is one tap target and the accessible name comes from the label text
+ * without any `aria-labelledby` wiring.
+ */
+export function CheckboxField({
+  name,
+  label,
+  hint,
+  defaultChecked,
+  checked,
+  onChange,
+  value = 'on',
+}: {
+  name: string
+  /** The visible label, and the input's accessible name. */
+  label: string
+  /** Optional second line explaining the consequence of ticking it. */
+  hint?: string
+  defaultChecked?: boolean
+  /**
+   * Controlled mode. Needed for exactly one caller: the Google button is outside
+   * the sign-in `<form>`, so it cannot read the checkbox from `FormData` and has
+   * to be told. Leaving both `checked` and `defaultChecked` unset keeps every
+   * other caller uncontrolled.
+   */
+  checked?: boolean
+  onChange?: (next: boolean) => void
+  /** Sent when ticked. A checkbox posts nothing when unticked, so `remember`
+      distinguishes "off" from "the field was missing". */
+  value?: string
+}) {
+  const id = useId()
+  const hintId = `${id}-hint`
+  const controlled = checked !== undefined
+
+  return (
+    <div className="flex items-start gap-2.5">
+      <input
+        type="checkbox"
+        id={id}
+        name={name}
+        value={value}
+        defaultChecked={controlled ? undefined : defaultChecked}
+        checked={controlled ? checked : undefined}
+        onChange={onChange ? (e) => onChange(e.target.checked) : undefined}
+        aria-describedby={hint ? hintId : undefined}
+        className="tk-check mt-0.5"
+      />
+      <label htmlFor={id} className="cursor-pointer">
+        <span className="tk-body block">{label}</span>
+        {hint && (
+          <span id={hintId} className="tk-caption mt-0.5 block">
+            {hint}
+          </span>
+        )}
+      </label>
+    </div>
+  )
+}

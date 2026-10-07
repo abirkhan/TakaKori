@@ -1,4 +1,4 @@
-﻿import { test as base, expect } from '@playwright/test'
+import { test as base, expect } from '@playwright/test'
 import { authedTest } from './fixtures'
 
 /**
@@ -234,7 +234,7 @@ base.describe('sheets', () => {
     const dialog = signedIn.getByRole('dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText(title)
-    // Amount, date and description only â€” account and category are deliberately
+    // Amount, date and description only — account and category are deliberately
     // not editable (see EditTransactionSheet).
     await expect(dialog.locator('[name="amount"]')).toBeVisible()
     await expect(dialog.locator('[name="description"]')).toBeVisible()

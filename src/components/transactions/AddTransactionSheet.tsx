@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useId, useState } from 'react'
+import { useActionState, useEffect, useId, useRef, useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createTransactionAction, type ActionState } from '@/actions/transactions'
 import type { Account, Category } from '@/lib/queries/reference'
@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { buttonClass } from '@/components/ui/button'
+import { notifySuccess } from '@/components/app/Toast'
 
 const TYPES = [
   { value: 'expense', label: 'Expense' },
@@ -80,6 +81,34 @@ function TransactionFields({
 }) {
   const [type, setType] = useState<TransactionType>('expense')
   const [draft, setDraft] = useState<Draft>(() => blank(today))
+
+  /**
+   * Says which kind of transaction was filed. "Transaction saved" tells someone who
+   * just moved money between two accounts nothing about whether it was spent, and
+   * that is the single most consequential thing this form decides.
+   *
+   * Announced here rather than in `AddTransactionSheet` because `type` lives in
+   * this component, and this component's effects run *before* its parent's — so
+   * the toast is raised before the parent's close effect unmounts the fields, and
+   * the sheet is gone by the time it becomes visible. Doing it in the parent would
+   * mean lifting `type` up here purely to hand it back.
+   *
+   * **Failures are not toasted.** This sheet stays open when the save is rejected,
+   * so the message can be read beside the offending field — and a toast is behind
+   * a modal backdrop while the sheet is open, so it would not be seen at all.
+   *
+   * `announced` is a ref rather than state: nothing renders it, and a `setState`
+   * in an effect is what `react-hooks/set-state-in-effect` exists to reject. It
+   * also resets on every open, because these fields are remounted each time.
+   */
+  const announced = useRef(false)
+  useEffect(() => {
+    if (!state.success) return
+    if (announced.current) return
+    announced.current = true
+    const label = TYPES.find((option) => option.value === type)?.label ?? 'Transaction'
+    notifySuccess(`${label} saved.`)
+  }, [state.success, type])
 
   const set = (key: keyof Draft) => (value: string) => setDraft((d) => ({ ...d, [key]: value }))
 

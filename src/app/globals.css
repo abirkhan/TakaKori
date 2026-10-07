@@ -884,6 +884,109 @@
     background-color: var(--warning-soft);
     color: var(--warning);
   }
+  /* --- Checkbox ---------------------------------------------------------
+     One control, used by "keep me signed in". `accent-color` means the tick and
+     the box are drawn by the platform from the brand colour, so the control is
+     correct in both schemes and in forced-colours mode without a second rule —
+     which a hand-rolled `<div role="checkbox">` would not be. 22px clears the
+     16px floor that rule 7 sets for fields. */
+  .tk-check {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    accent-color: var(--brand-600);
+    cursor: pointer;
+  }
+
+  /* --- Toast ------------------------------------------------------------
+     A transient message about something that just happened, floating above the
+     content. It borrows `.tk-alert`'s *tone* classes for colour so the two never
+     disagree about what "success" looks like, but it does not borrow
+     `.tk-alert`'s layout.
+
+     **It needs a different layout, and inheriting one was a real bug.** Measured
+     in a browser, a single-line toast rendered 60.8px tall: `.tk-alert` sets
+     `align-items: flex-start`, so the 36px dismiss button started on the same line
+     as 18.5px of text and then hung 16.8px below it, and being the tallest child
+     it set the height of a one-line message to three lines' worth. Icon and text
+     were fine with each other (bottoms 168.0 and 168.9); the button was the thing
+     out of place. So the toast centres its children and owns its own padding.
+
+     Vertical padding is 10px rather than `.tk-alert`'s 13px because the tallest
+     child here is a control, not a line of text, and 13px either side of a 36px
+     button makes the toast feel like a card rather than a message.
+
+     **The layer is `pointer-events: none` and only the toast is not.** The layer
+     spans the full width of the screen so it can centre the toast, and without
+     this it would silently swallow every tap aimed at the row underneath it —
+     which on the Transactions screen means the list the user just wrote to.
+
+     **`--nav-clear`, not a literal.** The tab bar is at the bottom and a toast at
+     the bottom would cover it, so this sits above the bar using the one number
+     that already tracks the bar's height and cannot drift from it.
+
+     `z-index: 50` — above the floating action button (40), below the skip link
+     (60), which is only visible on keyboard focus. A sheet is in the top layer
+     and so is above all of them. */
+  .tk-toast-layer {
+    position: fixed;
+    inset-inline: 0;
+    bottom: calc(var(--nav-clear) + 0.5rem);
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+    padding-inline: 1rem;
+    pointer-events: none;
+  }
+  .tk-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    max-width: min(28rem, 100%);
+    border-radius: var(--radius-field);
+    padding: 10px 12px;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    box-shadow: var(--shadow-raised);
+    /* The shared rise, not a bespoke keyframe: `tk-rise` is what every other
+       element entering this app uses, and a second animation for the same motion
+       is how two things drift apart. */
+    animation: tk-rise 180ms var(--ease-brand, ease-out);
+  }
+  /* Exit is the same fade played backwards, so it is a direction flag rather than
+     a second keyframe block. */
+  .tk-toast-out {
+    animation: tk-fade 150ms ease-in reverse forwards;
+  }
+
+  /* A square icon button. `.tk-btn-sm` measures 27.4px wide here, which is a
+     target you cannot reliably hit on a phone; this is 36×36, square so the glyph
+     sits centred, and it takes `.tk-btn-ghost`'s colour so it still reads as the
+     quiet control it is.
+
+     **Under 48px, deliberately.** The brand-design rule allows `.tk-btn-sm` where
+     there is a reason, and this is one: 48px of control on a 56px toast would be
+     the loudest thing on screen for a message about something that already
+     succeeded. The message is not solely time-dependent either — it pauses while
+     hovered or focused — so this is a convenience, not the only exit. */
+  .tk-toast-close {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+  .tk-toast-close:hover {
+    background-color: rgb(var(--tint) / 0.08);
+  }
+
   .tk-alert-info {
     background-color: var(--accent-soft);
     color: var(--accent);

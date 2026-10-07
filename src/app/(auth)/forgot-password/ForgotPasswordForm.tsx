@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { requestPasswordReset, type ActionState } from '../actions'
 import { Alert } from '@/components/ui/Alert'
 import { TextField } from '@/components/ui/Field'
@@ -12,6 +12,13 @@ export function ForgotPasswordForm() {
     requestPasswordReset,
     {},
   )
+
+  /**
+   * Controlled. React resets an uncontrolled field when a `useActionState` action
+   * resolves, and this form's realistic failure is a mistyped address — which used
+   * to be answered by clearing the address, making the mistype permanent.
+   */
+  const [email, setEmail] = useState('')
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
@@ -33,6 +40,8 @@ export function ForgotPasswordForm() {
             autoComplete="email"
             placeholder="you@example.com"
             required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             error={state.fieldErrors?.email}
           />
 

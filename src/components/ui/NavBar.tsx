@@ -2,7 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState } from 'react'
 import { Icon, type IconName } from './Icon'
+import { Modal } from './Modal'
+import { RowLink } from './Row'
+import { buttonClass } from './button'
 
 /**
  * Navigation.
@@ -22,24 +26,66 @@ import { Icon, type IconName } from './Icon'
  * which is the screen whose job is "everything about you and your setup".
  */
 
+/** Why a destination is on the bar rather than behind the overflow. */
 interface Tab {
   href: string
   label: string
   icon: IconName
+  /** Shown in the overflow sheet, where there is room to explain. */
+  blurb: string
 }
 
+/** The four you open to *look at things*. All of them, every day. */
 const TABS: readonly Tab[] = [
-  { href: '/dashboard', label: 'Home', icon: 'home' },
-  { href: '/transactions', label: 'Transactions', icon: 'receipt' },
-  { href: '/reports', label: 'Analytics', icon: 'chart' },
-  { href: '/accounts', label: 'Account', icon: 'user' },
+  { href: '/dashboard', label: 'Home', icon: 'home', blurb: 'What is left, and what is due' },
+  {
+    href: '/transactions',
+    label: 'Transactions',
+    icon: 'receipt',
+    blurb: 'Everything you have recorded',
+  },
+  { href: '/reports', label: 'Analytics', icon: 'chart', blurb: 'Where the money went' },
+  {
+    href: '/accounts',
+    label: 'Account',
+    icon: 'user',
+    blurb: 'Your accounts, and this app’s settings',
+  },
 ]
 
-/** Reachable from the header once the tabs move out of the bottom bar. */
+/**
+ * The three you open to *maintain the setup*, ordered by how often that is.
+ *
+ * **This order is the change.** It was Categories, Budgets, Recurring — flat in
+ * the header beside the four above, which is alphabetical rather than an ordering,
+ * and treated a screen you check weekly the same as one you tidy twice a year.
+ * Now:
+ *
+ * 1. **Budgets** — a limit is set once and then checked against, often, and "am I
+ *    over?" is the reason to open it.
+ * 2. **Recurring** — salary and subscriptions; consulted when something looks
+ *    wrong or is due to change.
+ * 3. **Categories** — the vocabulary, corrected when it stops matching reality.
+ *    Rare by design.
+ *
+ * They live behind one overflow control rather than in the header, so the header
+ * carries only what is used daily. That is the "less" half of the brief: seven
+ * links in a row is a menu, not navigation, and at 360px it wraps.
+ */
 const SECONDARY: readonly Tab[] = [
-  { href: '/categories', label: 'Categories', icon: 'tag' },
-  { href: '/budgets', label: 'Budgets', icon: 'target' },
-  { href: '/recurring', label: 'Recurring', icon: 'repeat' },
+  { href: '/budgets', label: 'Budgets', icon: 'target', blurb: 'Limits, and what is left of each' },
+  {
+    href: '/recurring',
+    label: 'Recurring',
+    icon: 'repeat',
+    blurb: 'Salary, subscriptions, anything repeating',
+  },
+  {
+    href: '/categories',
+    label: 'Categories',
+    icon: 'tag',
+    blurb: 'The labels you sort spending by',
+  },
 ]
 
 export function BottomNav() {
@@ -101,26 +147,76 @@ function TabLink({ tab, active }: { tab: Tab; active: boolean }) {
   )
 }
 
+/**
+ * The header's navigation: the daily destinations, plus one overflow control.
+ *
+ * **The overflow trigger shows at every width, including below `md`.** That looks
+ * redundant beside a bottom tab bar carrying the same four, and it is the point:
+ * on a phone the three setup screens were reachable *only* by scrolling to Account
+ * and finding them there, which made the tab bar look like the whole application.
+ * One button puts them a tap away without adding a fifth tab — which the four-tab
+ * ceiling rules out, and rightly.
+ *
+ * A `Modal` rather than a dropdown: the focus trap, Escape, the top layer and
+ * backdrop inertness come free, which is why every other interruption in this app
+ * is one.
+ */
 export function HeaderNav() {
   const pathname = usePathname()
+  const [open, setOpen] = useState(false)
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
   return (
-    <nav aria-label="Sections" className="hidden items-center gap-1 md:flex">
-      {[...TABS, ...SECONDARY].map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          className="rounded-pill px-3 py-2 text-sm font-medium transition-colors"
-          aria-current={isActive(tab.href) ? 'page' : undefined}
-          style={{
-            color: isActive(tab.href) ? 'var(--accent)' : 'var(--muted)',
-            backgroundColor: isActive(tab.href) ? 'var(--accent-soft)' : 'transparent',
-          }}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
+    <>
+      <nav aria-label="Sections" className="hidden items-center gap-1 md:flex">
+        {TABS.map((tab) => (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className="rounded-pill px-3 py-2 text-sm font-medium transition-colors"
+            aria-current={isActive(tab.href) ? 'page' : undefined}
+            style={{
+              color: isActive(tab.href) ? 'var(--accent)' : 'var(--muted)',
+              backgroundColor: isActive(tab.href) ? 'var(--accent-soft)' : 'transparent',
+            }}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={buttonClass('ghost')}
+        aria-label="More sections"
+        aria-haspopup="dialog"
+      >
+        <Icon name="dots" size={20} />
+      </button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="More"
+        description="Set up how TakaKori keeps track of your money."
+      >
+        {/* One card with dividers, not a stack of cards, and one link per row —
+            ADR-029 again, in the place it is easiest to forget. */}
+        <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
+          {SECONDARY.map((tab) => (
+            <li key={tab.href}>
+              <RowLink
+                href={tab.href}
+                icon={tab.icon}
+                title={tab.label}
+                subtitle={tab.blurb}
+                linkLabel={tab.label}
+              />
+            </li>
+          ))}
+        </ul>
+      </Modal>
+    </>
   )
 }
