@@ -12,6 +12,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { buttonClass } from '@/components/ui/button'
 import { notifySuccess } from '@/components/app/Toast'
 import { useWriteAction } from '@/lib/client/useWriteAction'
+import { QUEUED_SUCCESS } from '@/lib/client/useWriteAction'
 
 const TYPES = [
   { value: 'expense', label: 'Expense' },
@@ -78,7 +79,11 @@ function TransactionFields({
   accounts: Account[]
   categories: Category[]
   today: string
-  state: ActionState
+  /**
+   * `queued` is present because `useWriteAction` widens the action's own state with
+   * it — see that hook. The Server Action never sets it; only the offline path does.
+   */
+  state: ActionState & { queued?: boolean }
 }) {
   const [type, setType] = useState<TransactionType>('expense')
   const [draft, setDraft] = useState<Draft>(() => blank(today))
@@ -107,9 +112,19 @@ function TransactionFields({
     if (!state.success) return
     if (announced.current) return
     announced.current = true
+    /**
+     * A queued write is **not** "saved", and saying so is the whole of ADR-043: the
+     * entry is on the device and nowhere else until a connection drains it. "Expense
+     * saved." would tell a user it is on the server, and they would not think to open
+     * the app again.
+     */
+    if (state.queued) {
+      notifySuccess(QUEUED_SUCCESS)
+      return
+    }
     const label = TYPES.find((option) => option.value === type)?.label ?? 'Transaction'
     notifySuccess(`${label} saved.`)
-  }, [state.success, type])
+  }, [state.success, state.queued, type])
 
   const set = (key: keyof Draft) => (value: string) => setDraft((d) => ({ ...d, [key]: value }))
 
@@ -244,6 +259,10 @@ export function AddTransactionSheet({
   const [state, formAction, pending] = useWriteAction<ActionState>(
     createTransactionAction,
     {},
+    // The one write that is queueable today. Offline, this stores the transaction on
+    // the device instead of refusing it — see ADR-042 for what makes the replay safe
+    // and ADR-043 for why it says "saved on this device" rather than "saved".
+    { queueKind: 'transaction.create' },
   )
   const formId = useId()
 
@@ -255,9 +274,14 @@ export function AddTransactionSheet({
   }, [state.success, open, onClose])
 
   // A Server Action's `revalidatePath` cannot reach the browser's cache, so the
-  // dashboard would keep showing the balance from before this write. See
+// // dashboard would keep showing the balance from before this write. See
   // `useWriteInvalidation` for why this exists at all.
-  useWriteInvalidation(state.success, 'transaction')
+  //
+  // Skipped for a **queued** write, deliberately. Nothing has reached the database,
+  // so there is nothing new to read — invalidating would drop a cached list and
+  // immediately fail to refill it, leaving the user looking at a worse screen than
+  // the one they already had. The row appears when the drain succeeds.
+  useWriteInvalidation(state.queued ? undefined : state.success, 'transaction')
 
   return (
     <Modal

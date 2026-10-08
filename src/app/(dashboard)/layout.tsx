@@ -5,6 +5,7 @@ import { Logo } from '@/components/ui/Logo'
 import { InstallBanner } from '@/components/app/InstallPrompt'
 import { Toaster } from '@/components/app/Toast'
 import { SignOutButton } from '@/components/app/SignOutButton'
+import { OutboxDrain } from '@/components/app/OutboxDrain'
 
 /**
  * The authenticated shell.
@@ -29,6 +30,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="relative min-h-dvh">
       <div className="tk-wash" aria-hidden="true" />
+
+      {/* Replays writes queued while offline. Here rather than the root layout so it
+          runs only where the user has data, and not on sign-in. Renders nothing. */}
+      <OutboxDrain />
 
       <a href="#main" className="tk-skip">
         Skip to content

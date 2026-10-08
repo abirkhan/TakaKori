@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useActionState } from 'react'
 import { useOffline } from 'next/offline'
+import { queueWrite } from './offlineWrites'
+import type { QueuedWriteKind } from './outbox'
 
 /**
  * A Server Action whose pending state cannot hang.
@@ -53,10 +55,41 @@ export interface ActionResult {
   error?: string
   success?: string
   fieldErrors?: Record<string, string>
+  /**
+   * The write was stored on this device and is waiting for a connection, rather than
+   * having been sent. See ADR-043 — the distinction is the difference between "saved"
+   * and "saved until this browser discards it".
+   */
+  queued?: boolean
 }
 
-/** Raised before dispatch, while offline. Nothing was written. */
+/**
+ * Raised when there is no connection and the write has no queueable equivalent.
+ *
+ * Only for call sites that pass no `queueKind` — sign-in, password reset, and forms
+ * not yet moved across. An authentication call cannot be replayed later, so the
+ * honest answer is that it did not happen.
+ */
 export const BLOCKED_ERROR = 'You are offline, so this was not saved. Reconnect and try again.'
+
+/**
+ * Raised when the write should have been queued and could not be.
+ *
+ * Distinct from `BLOCKED_ERROR` on purpose: that one means "not now, try again",
+ * and this one means "this device will not keep it" — Safari private mode, or
+ * storage full. Neither may be reported as a save.
+ */
+export const QUEUE_UNAVAILABLE_ERROR =
+  'This could not be saved: this browser will not store it while you are offline. Reconnect and try again.'
+
+/**
+ * The confirmation for a write that is queued rather than sent.
+ *
+ * Deliberately not "Saved." The entry is on the device and nowhere else until a
+ * connection drains it, and a user who believes it is on the server will not think
+ * to open the app again.
+ */
+export const QUEUED_SUCCESS = 'Saved on this device. It will sync when you are back online.'
 
 /**
  * Raised after dispatch, when the deadline passed.
@@ -75,15 +108,26 @@ export const TIMEOUT_ERROR =
 export const DEFAULT_TIMEOUT_MS = 10_000
 
 /**
- * The state a form should render, given React's result and anything we decided
- * ourselves.
+ * The state a form should render, given React's result and what we decided ourselves.
  *
  * Pure and exported so the decision is testable without mounting a component. The
  * interesting behaviour here is all React timing, which a unit test can only assert
  * by asserting itself.
+ *
+ * A queued write reports **success**, because from the user's point of view the
+ * entry is recorded and the form should close — but with different wording, and with
+ * `queued` set so a caller can say so. Folding it into `error` would leave the sheet
+ * open over a transaction that is perfectly well queued, which is the confusing
+ * version of this.
  */
-export function writeOutcome(reactState: ActionResult, localError: string | null): ActionResult {
-  return localError ? { error: localError } : reactState
+export function writeOutcome(
+  reactState: ActionResult,
+  localError: string | null,
+  queued = false,
+): ActionResult {
+  if (localError) return { error: localError }
+  if (queued) return { success: QUEUED_SUCCESS, queued: true }
+  return reactState
 }
 
 export type WriteAction<State extends ActionResult> = (
@@ -117,8 +161,32 @@ export type WriteAction<State extends ActionResult> = (
 export function useWriteAction<State extends ActionResult>(
   action: WriteAction<State>,
   initialState: State,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS,
-): [State, (formData: FormData) => void, boolean, number] {
+  options: {
+    /** Overridable for tests; nothing in the app overrides it. */
+    timeoutMs?: number
+    /**
+     * Which write this is, so it can be **queued** when there is no connection
+     * rather than refused.
+     *
+     * Omitted at a call site that has no queueable equivalent — sign-in, password
+     * reset, and every form not yet moved across — and those keep refusing with
+     * `BLOCKED_ERROR`, which is correct: an authentication call cannot be replayed
+     * later, and pretending otherwise would strand the user on a form that silently
+     * does nothing.
+     */
+    queueKind?: QueuedWriteKind
+  } = {},
+/**
+   * The state is returned as `State & { queued?: boolean }` rather than by adding
+   * `queued` to the actions' own `ActionState`.
+   *
+   * Queueing is a client concern: no Server Action ever sets that flag, because no
+   * Server Action runs offline. Widening here keeps it in the module that produces
+   * it, instead of adding a field to three server-side interfaces that would then
+   * have to explain a flag they can never return.
+   */
+): [State & { queued?: boolean }, (formData: FormData) => void, boolean, number] {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, queueKind } = options
   const [reactState, formAction, reactPending] = useActionState<State, FormData>(
     action,
     // `Awaited<State>` rather than `State`: React's types ask for it, and for a
@@ -130,6 +198,15 @@ export function useWriteAction<State extends ActionResult>(
   const offline = useOffline()
   const [localError, setLocalError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  /**
+   * Set when the write was queued rather than sent.
+   *
+   * Carried in the state rather than returned separately, because every consumer
+   * already reads `state` to decide whether to close, and a fifth tuple element
+   * would have meant touching eleven call sites to learn something they can get
+   * from the state they already have.
+   */
+  const [queued, setQueued] = useState(false)
 
   /**
    * Starts when React goes pending and clears when it settles, so a timer is only
@@ -150,35 +227,53 @@ export function useWriteAction<State extends ActionResult>(
    * to clear a message about the last one.
    */
   const dispatch = useCallback(
-    (formData: FormData) => {
+    async (formData: FormData) => {
       // Before `localError` is touched, and unconditionally: this is what tells a
       // caller that a new submission has begun even when the outcome is the same
       // string as last time.
       setAttempt((n) => n + 1)
       setLocalError(null)
+      setQueued(false)
 
       /**
-       * The offline short-circuit, and the reason it is safe: the action is not
-       * dispatched at all. Nothing is written, so a retry once the connection is
-       * back cannot produce a duplicate, and the user is told why instead of
-       * watching a button that will never come back.
+       * No connection. **Queue it rather than refuse it**, which is the whole point
+       * of the outbox: a user recording a 200 taka expense in a lift must not lose
+       * the entry, and refusing is losing it with a polite message attached.
        *
-       * `offline` is `useOffline()` rather than `navigator.onLine`, for the reason
-       * `OfflineBanner` documents: `navigator.onLine` reports the network interface
-       * and stays `true` on a phone on a WiFi with no upstream.
+       * `queued: true` rides along with the success so the caller can word it
+       * honestly. ADR-043: the entry is saved *on this device*, not saved, because
+       * IndexedDB can be evicted and a queued write cannot outlive that. Telling the
+       * user "saved" would be claiming a durability the app does not have.
        */
       if (offline) {
-        setLocalError(BLOCKED_ERROR)
+        if (!queueKind) {
+          setLocalError(BLOCKED_ERROR)
+          return
+        }
+
+        const stored = await queueWrite(queueKind, formData)
+
+        /**
+         * Not queued is not a queued write. ADR-043 again: Safari private mode and
+         * a full iOS device make the outbox unavailable, and the honest thing is to
+         * say the entry was not kept rather than confirm a save that did not happen.
+         */
+        if (!stored) {
+          setLocalError(QUEUE_UNAVAILABLE_ERROR)
+          return
+        }
+
+        setQueued(true)
         return
       }
 
       formAction(formData)
     },
-    [offline, formAction],
+    [offline, formAction, queueKind],
   )
 
   return [
-    writeOutcome(reactState, localError) as State,
+    writeOutcome(reactState, localError, queued) as State,
     dispatch,
     reactPending && !localError,
     attempt,

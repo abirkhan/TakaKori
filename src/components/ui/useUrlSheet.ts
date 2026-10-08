@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 /**
  * A sheet's open state, held in the URL as `?sheet=<name>`.
@@ -24,7 +24,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
  * new function identity every render would re-run those effects every render.
  */
 export function useUrlSheet(name: string): { open: boolean; close: () => void } {
-  const router = useRouter()
   const params = useSearchParams()
 
   const open = params.get('sheet') === name
@@ -33,11 +32,27 @@ export function useUrlSheet(name: string): { open: boolean; close: () => void } 
     const next = new URLSearchParams(params.toString())
     next.delete('sheet')
     const qs = next.toString()
-    // `window` is safe here: `close` only ever runs from a user interaction, and
-    // `router.replace` with a bare `?` would leave a dangling query on the path.
+    // `window` is safe here: `close` only ever runs from a user interaction, and a
+    // bare `?` would leave a dangling query on the path.
     const path = window.location.pathname
-    router.replace(qs ? `${path}?${qs}` : path, { scroll: false })
-  }, [params, router])
+    const href = qs ? `${path}?${qs}` : path
+
+    /**
+     * `history.replaceState`, not `router.replace`.
+     *
+     * Next patches `replaceState` to update the router's own state, including
+     * `useSearchParams`, **without** asking the server for that URL's RSC payload —
+     * which is the entire reason to prefer it here.
+     *
+     * `router.replace` to the same path with a different query still requests a
+     * payload, and offline that request fails, so the sheet does not close. That is
+     * not cosmetic: after queueing a transaction offline the sheet stayed open with
+     * a success toast, and a user who tapped save again would have queued the same
+     * expense **twice**. Two queued copies is two rows, and neither is wrong enough
+     * for the user to notice before it matters.
+     */
+    window.history.replaceState(null, '', href)
+  }, [params])
 
   return { open, close }
 }
