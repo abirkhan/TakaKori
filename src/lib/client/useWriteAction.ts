@@ -94,9 +94,18 @@ export type WriteAction<State extends ActionResult> = (
 /**
  * `useActionState` with a deadline.
  *
- * `[state, dispatch, pending]` — the same triple `useActionState` returns, so the
- * shape a call site destructures does not change and the diff at each call site is
- * one line.
+ * `[state, dispatch, pending, attempt]` — the same first three `useActionState`
+ * returns, so the shape a call site destructures does not change and the diff at
+ * each call site is one line. The fourth is a counter that increments on every
+ * submission, which exists because of a subtlety this hook creates:
+ *
+ * **Why `attempt` is needed.** When offline, `dispatch` clears `localError` and
+ * immediately sets it again in the same handler. React batches those two updates,
+ * so `localError` never observably changes — the state a caller sees is the same
+ * object it saw before. An effect watching `state.error` therefore does not
+ * re-run, and a form that guards against re-announcing the last result would
+ * swallow the second identical failure. The attempt counter is the one thing that
+ * reliably differs between two submissions, so it is what a caller can key on.
  *
  * `dispatch` takes the `FormData` and **forwards it untouched**, which is the one
  * thing it must never get wrong. It is still React's own dispatch underneath, so
@@ -109,7 +118,7 @@ export function useWriteAction<State extends ActionResult>(
   action: WriteAction<State>,
   initialState: State,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-): [State, (formData: FormData) => void, boolean] {
+): [State, (formData: FormData) => void, boolean, number] {
   const [reactState, formAction, reactPending] = useActionState<State, FormData>(
     action,
     // `Awaited<State>` rather than `State`: React's types ask for it, and for a
@@ -120,6 +129,7 @@ export function useWriteAction<State extends ActionResult>(
   )
   const offline = useOffline()
   const [localError, setLocalError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   /**
    * Starts when React goes pending and clears when it settles, so a timer is only
@@ -141,6 +151,10 @@ export function useWriteAction<State extends ActionResult>(
    */
   const dispatch = useCallback(
     (formData: FormData) => {
+      // Before `localError` is touched, and unconditionally: this is what tells a
+      // caller that a new submission has begun even when the outcome is the same
+      // string as last time.
+      setAttempt((n) => n + 1)
       setLocalError(null)
 
       /**
@@ -163,5 +177,10 @@ export function useWriteAction<State extends ActionResult>(
     [offline, formAction],
   )
 
-  return [writeOutcome(reactState, localError) as State, dispatch, reactPending && !localError]
+  return [
+    writeOutcome(reactState, localError) as State,
+    dispatch,
+    reactPending && !localError,
+    attempt,
+  ]
 }

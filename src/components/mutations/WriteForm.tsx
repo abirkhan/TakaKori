@@ -72,7 +72,7 @@ export function WriteForm({
   className?: string
   children: ReactNode
 }) {
-  const [state, formAction] = useWriteAction<ActionState>(action, {})
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(action, {})
 
   useWriteInvalidation(state.success, kind)
 
@@ -89,27 +89,54 @@ export function WriteForm({
    * where a failed delete returned to a clean page and said nothing.
    *
    * Announced from effects rather than render, because the arrival of a result is
-   * an event and render is not. The "already said it" flags are refs, not state:
+   * an event and render is not. The "already said it" guards are refs, not state:
    * state would mean a `setState` inside these effects, which cascades a render,
-   * and `react-hooks/set-state-in-effect` is right to reject it. Without a guard,
-   * any unrelated re-render would re-announce the last result forever.
+   * and `react-hooks/set-state-in-effect` is right to reject it.
+   *
+   * **They remember the attempt as well as the message.** The first version latched
+   * a boolean and never cleared it, so only the *first* error a form ever produced
+   * was announced. Post an occurrence, fail, fix it, fail again — the second
+   * failure said nothing, which is exactly the ADR-037 failure this component
+   * exists to prevent, arriving through a different door. `RecurringCard` mounts
+   * this form once and posts many times, so that was reachable in normal use.
+   *
+   * `attempt` is what makes it work, and it is not redundant with the message: two
+   * consecutive failures produce the *same* string, and while offline the hook
+   * re-sets that same string without it ever changing, so a guard keyed on the
+   * message alone swallows the second one. See `useWriteAction` on why.
+   *
+   * **`pending` gates both, so a retry does not re-announce the failure it is
+   * replacing.** Bumping the attempt happens the instant the form is submitted,
+   * while the previous result is still in state. Without this gate that stale
+   * error would be announced a second time on its way out.
    */
-  const announcedSuccess = useRef(false)
-  useEffect(() => {
-    if (!state.success) return
-    if (announcedSuccess.current) return
-    announcedSuccess.current = true
-    notifySuccess(savedMessage ?? CONFIRMATION[kind])
-  }, [state.success, savedMessage, kind])
+  const announcedSuccess = useRef<{ attempt: number; message: string } | null>(null)
+  const announcedError = useRef<{ attempt: number; message: string } | null>(null)
 
-  const announcedError = useRef(false)
   useEffect(() => {
-    if (!state.error) return
-    if (state.fieldErrors) return
-    if (announcedError.current) return
-    announcedError.current = true
+    if (pending) return
+    if (!state.success) {
+      announcedSuccess.current = null
+      return
+    }
+    const message = savedMessage ?? CONFIRMATION[kind]
+    const last = announcedSuccess.current
+    if (last && last.attempt === attempt && last.message === message) return
+    announcedSuccess.current = { attempt, message }
+    notifySuccess(message)
+  }, [state.success, savedMessage, kind, attempt, pending])
+
+  useEffect(() => {
+    if (pending) return
+    if (!state.error || state.fieldErrors) {
+      announcedError.current = null
+      return
+    }
+    const last = announcedError.current
+    if (last && last.attempt === attempt && last.message === state.error) return
+    announcedError.current = { attempt, message: state.error }
     notifyError(state.error)
-  }, [state.error, state.fieldErrors])
+  }, [state.error, state.fieldErrors, attempt, pending])
 
   return (
     <form action={formAction} className={className}>

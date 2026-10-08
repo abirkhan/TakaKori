@@ -1224,3 +1224,22 @@ written to. A banner describing an intention is worse than a plain one.
 **Not solved.** Nothing is queued, so closing the tab still discards an in-flight
 write, and the outbox remains phase-4 work. The 10-second deadline only bounds how
 long the user is left waiting; it does not make offline writes possible.
+
+**One consequence worth recording.** Bounding `pending` created a second bug, and
+only browser testing found it. `WriteForm` guards against re-announcing the last
+result, and it had been doing that with a boolean that latched `true` forever — so
+only the *first* error a form ever produced was announced. Two consecutive failures
+say the same thing, and the second was silent, which is the ADR-037 failure arriving
+through a different door.
+
+The obvious fix — remember the message rather than a boolean — does not work here,
+because this hook makes the message *unobservably* stable: offline, `dispatch` clears
+`localError` and re-sets it in the same handler, React batches the two, and the state
+the caller sees is identical to what it saw before. So `useWriteAction` also returns
+an `attempt` counter, which is the one thing that reliably differs between two
+submissions. `WriteForm` keys its guards on `(attempt, message)` and skips while
+`pending`, so a retry does not re-announce the failure it is replacing on its way
+out.
+
+Verified in a browser: three consecutive offline attempts each produce their toast,
+and a successful delete still announces exactly once.
