@@ -11,8 +11,7 @@ import { useWriteAction } from '@/lib/client/useWriteAction'
 
 export function CategoryForm() {
   const [state, formAction, pending] = useWriteAction<ActionState>(
-    createCategoryAction,
-    {},
+    createCategoryAction,    {}, { queueKind: 'category.create' },
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without

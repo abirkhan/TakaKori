@@ -45,14 +45,15 @@ const COLUMNS: Record<string, Record<string, string>> = {
     occurredOn: 'occurred_on',
     description: 'description',
   },
-  // An edit carries the row it changes in `id`, plus the same fields as the create.
+  // An edit carries the row it changes in `id`, plus only the fields
+  // `updateTransactionAction` actually reads. Deliberately *not* the create's field
+  // list: it does not accept accountId, categoryId or counterpartyAccountId, so
+  // mapping them would make a queued edit change columns the online path leaves
+  // alone — an offline replay that is quietly not the same write.
   'transaction.update': {
     id: 'id',
     type: 'type',
     amount: 'amount',
-    accountId: 'account_id',
-    categoryId: 'category_id',
-    counterpartyAccountId: 'counterparty_account_id',
     occurredOn: 'occurred_on',
     description: 'description',
   },
@@ -62,10 +63,10 @@ const COLUMNS: Record<string, Record<string, string>> = {
   'budget.create': { amount: 'amount', categoryId: 'category_id' },
   'budget.delete': { id: 'id' },
   'recurring.delete': { id: 'id' },
-  'occurrence.post': {
-    recurringId: 'recurringId',
-    occurrenceDate: 'occurrenceDate',
-  },
+  // `id` is the *rule*, not the occurrence — `postOccurrenceAction` reads it as
+  // `formData.get('id')` and `applyQueuedWrite` passes it on as
+  // `target_recurring_id`.
+  'occurrence.post': { id: 'id', occurrenceDate: 'occurrenceDate' },
 }
 
 /**

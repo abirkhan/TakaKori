@@ -260,7 +260,9 @@ async function updateRow(
  * and both stay errors.
  */
 async function postOccurrence(ctx: ApplyContext, write: QueuedWrite): Promise<ApplyResult> {
-  const ruleId = write.payload.recurringId
+  // `id` is the rule. `postOccurrenceAction` names it that way in its FormData, and
+  // renaming it here would have meant a queued occurrence posting against no rule.
+  const ruleId = write.payload.id
   const occurrenceDate = write.payload.occurrenceDate
 
   if (typeof ruleId !== 'string' || typeof occurrenceDate !== 'string') {

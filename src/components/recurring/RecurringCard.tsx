@@ -61,7 +61,7 @@ export function RecurringCard({
                 {occ.clamped && (
                   <span className="tk-caption text-warning">short month, moved to last day</span>
                 )}
-                <WriteForm action={postOccurrenceAction} kind="occurrence">
+                <WriteForm action={postOccurrenceAction} kind="occurrence" queueKind="occurrence.post">
                   <input type="hidden" name="id" value={rule.id} />
                   <input type="hidden" name="occurrenceDate" value={occ.date} />
                   <button type="submit" className={buttonClass('soft', { size: 'sm' })}>
@@ -103,6 +103,7 @@ export function RecurringCard({
       <WriteForm
         action={deleteRecurringAction}
         kind="recurring"
+        queueKind="recurring.delete"
         savedMessage="Recurring rule deleted."
         className="mt-3 flex justify-end"
       >

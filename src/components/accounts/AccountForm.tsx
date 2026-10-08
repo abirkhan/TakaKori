@@ -81,8 +81,7 @@ function AccountFields({
  */
 export function AccountForm() {
   const [state, formAction, pending] = useWriteAction<ActionState>(
-    createAccountAction,
-    {},
+    createAccountAction,    {}, { queueKind: 'account.create' },
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without

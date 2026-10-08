@@ -49,8 +49,7 @@ export function EditTransactionSheet({
   onClose: () => void
 }) {
   const [state, formAction, pending] = useWriteAction<ActionState>(
-    updateTransactionAction,
-    {},
+    updateTransactionAction,    {}, { queueKind: 'transaction.update' },
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without

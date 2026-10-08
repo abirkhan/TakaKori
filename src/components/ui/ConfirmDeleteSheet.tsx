@@ -9,6 +9,7 @@ import type { ActionState } from '@/actions/transactions'
 import { useWriteAction } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
+import type { QueuedWriteKind } from '@/lib/client/outbox'
 
 /**
  * A destructive confirmation.
@@ -38,6 +39,7 @@ export function ConfirmDeleteSheet({
   description,
   action,
   kind,
+  queueKind,
   hidden,
   confirmLabel = 'Delete',
   savedMessage = 'Deleted.',
@@ -51,6 +53,16 @@ export function ConfirmDeleteSheet({
   action: (previous: ActionState, formData: FormData) => Promise<ActionState>
   /** Which write this is, so the right cached reads are cleared. */
   kind: WriteKind
+  /**
+   * Which write this is, for the outbox — so a delete taken offline is queued
+   * rather than refused. Separate from `kind` because there are six cache kinds and
+   * ten queued ones, and a pair that disagrees would invalidate the wrong reads.
+   *
+   * A delete is the safest thing to queue: it carries an id and nothing else, and
+   * ADR-042 has a delete whose row has already gone count as success, so a replay
+   * converges without anything to reconcile.
+   */
+  queueKind?: QueuedWriteKind
   /** Row identity, posted with the delete. */
   hidden?: Record<string, string>
   confirmLabel?: string
@@ -64,11 +76,12 @@ export function ConfirmDeleteSheet({
   children?: ReactNode
 }) {
   /** `useMemo` because the action is a prop; see the note in `WriteForm`. */
-const [state, formAction] = useWriteAction<ActionState>(action, {})
+const [state, formAction] = useWriteAction<ActionState>(action, {}, { queueKind })
 
   // Clears the cache at the moment of the write. Without it a deleted
   // transaction leaves its own amount in the total balance until a hard reload.
-  useWriteInvalidation(state.success, kind)
+  // Skipped for a queued delete, because nothing has reached the database yet.
+  useWriteInvalidation(state.queued ? undefined : state.success, kind)
 
   /**
    * Success toasts; failure does not, and that is not an oversight.

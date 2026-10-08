@@ -146,6 +146,7 @@ export function TransactionList({ rows }: { rows: TransactionRowView[] }) {
           }}
           action={deleteTransactionAction}
           kind="transaction"
+          queueKind="transaction.delete"
           savedMessage="Transaction deleted."
           hidden={{ id: selected.id }}
           title="Delete this transaction?"

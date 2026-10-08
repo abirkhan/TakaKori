@@ -99,6 +99,7 @@ export function BudgetCard({
 
       <WriteForm
         action={deleteBudgetAction}
+        queueKind="budget.delete"
         kind="budget"
         savedMessage="Budget deleted."
         className="mt-3 flex justify-end"

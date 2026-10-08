@@ -5,6 +5,7 @@ import type { ActionState } from '@/actions/transactions'
 import { useWriteAction } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
+import type { QueuedWriteKind } from '@/lib/client/outbox'
 import { Alert } from '@/components/ui/Alert'
 import { notifyError, notifySuccess } from '@/components/app/Toast'
 
@@ -56,6 +57,7 @@ const CONFIRMATION: Record<WriteKind, string> = {
 export function WriteForm({
   action,
   kind,
+  queueKind,
   savedMessage,
   className,
   children,
@@ -65,6 +67,17 @@ export function WriteForm({
   /** Which write this is. Decides what gets invalidated — see `WRITES`. */
   kind: WriteKind
   /**
+   * Which write this is, for the outbox. Separate from `kind` on purpose: `kind`
+   * says what to invalidate in the cache and there are six of them, while this says
+   * what the queued record *is* and there are ten. Collapsing them would let a caller
+   * pass a pair that disagree.
+   *
+   * Omitted where nothing queueable exists — `RecurringForm` is the one, whose
+   * mapping has not been checked against its own fields — and that write is refused
+   * offline with a plain message rather than half-supported.
+   */
+  queueKind?: QueuedWriteKind
+  /**
    * Overrides the wording for writes whose verb `kind` cannot express — the three
    * deletes. Optional because most forms do not need it.
    */
@@ -72,7 +85,7 @@ export function WriteForm({
   className?: string
   children: ReactNode
 }) {
-  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(action, {})
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(action, {}, { queueKind })
 
   useWriteInvalidation(state.success, kind)
 

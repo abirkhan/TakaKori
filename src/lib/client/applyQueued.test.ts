@@ -290,7 +290,7 @@ describe('applyQueuedWrite - updates and occurrences', () => {
 
   const occurrence = queued({
     kind: 'occurrence.post',
-    payload: { recurringId: 'rule-1', occurrenceDate: '2026-11-05' },
+    payload: { id: 'rule-1', occurrenceDate: '2026-11-05' },
   })
 
   it('posts an occurrence through the database function', async () => {
