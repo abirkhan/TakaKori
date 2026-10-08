@@ -45,9 +45,41 @@ const COLUMNS: Record<string, Record<string, string>> = {
     occurredOn: 'occurred_on',
     description: 'description',
   },
+  // An edit carries the row it changes in `id`, plus the same fields as the create.
+  'transaction.update': {
+    id: 'id',
+    type: 'type',
+    amount: 'amount',
+    accountId: 'account_id',
+    categoryId: 'category_id',
+    counterpartyAccountId: 'counterparty_account_id',
+    occurredOn: 'occurred_on',
+    description: 'description',
+  },
+  'transaction.delete': { id: 'id' },
+  'account.create': { name: 'name', kind: 'kind', openingBalance: 'opening_balance' },
+  'category.create': { name: 'name', type: 'type' },
+  'budget.create': { amount: 'amount', categoryId: 'category_id' },
+  'budget.delete': { id: 'id' },
+  'recurring.delete': { id: 'id' },
+  'occurrence.post': {
+    recurringId: 'recurringId',
+    occurrenceDate: 'occurrenceDate',
+  },
 }
 
-/** The kinds this build can both queue and replay. */
+/**
+ * The kinds this build can both queue and replay.
+ *
+ * Derived from `COLUMNS`, so the two cannot drift: a kind with no field mapping
+ * cannot be queued, and `applyQueuedWrite` refuses anything it cannot replay.
+ *
+ * **`recurring.create` is deliberately absent.** Its form has a dozen fields and they
+ * have not been read against `RecurringForm`, and a mapping guessed from a
+ * neighbouring form is how a queued rule arrives with a null where an amount belongs.
+ * Omitting it is safe by construction — the write is refused offline with a plain
+ * message — and adding it is a small, checkable change.
+ */
 export const QUEUEABLE_KINDS = Object.keys(COLUMNS) as QueuedWriteKind[]
 
 /**
