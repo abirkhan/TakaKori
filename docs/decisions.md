@@ -1167,3 +1167,60 @@ Two further decisions inside it:
 `sheets.spec.ts`'s "a rejected save keeps the sheet open with the input intact" is
 the test that pins the exception, and `flows.spec.ts` pins the rest: that a
 confirmation appears, is polite, goes away on its own, and does not intercept taps.
+
+## ADR-041 - The deadline lives in the component, because React owns the result
+
+**Context.** Verified in a browser with the network severed: submitting a
+transaction offline left the sheet's button reading "Saving…" and disabled
+indefinitely. No error, no toast, nothing in the `outbox` store, still stuck past
+fifteen seconds. Every `useActionState` form in the app behaved this way —
+sign-in, sign-up, forgot-password, and all seven data forms. A person on a bad
+connection who tapped "Sign in" got a dead button and no explanation, which is the
+worst possible first impression on a ledger.
+
+**The finding that shaped this.** The Server Action's promise **never settles** when
+the request dies below the RSC layer. It does not resolve and it does not reject —
+it is not a failure, it is an absence. So `useActionState`'s `isPending` has
+nothing to resolve with and nothing to reject with.
+
+**Decision.** `useWriteAction` in `src/lib/client/useWriteAction.ts`. It returns
+the same `[state, dispatch, pending]` triple as `useActionState`, so each of the
+eleven call sites swapped one line and rendered nothing new — every form already
+renders `state.error`. Two differences:
+
+- `pending` is `reactPending && !localError`, so the button comes back.
+- `state` is replaced with an error when the write was blocked or given up on,
+  because React will never produce one.
+
+It also **refuses to dispatch while offline**. The action is not sent at all, so
+nothing is written and a retry cannot produce a duplicate entry. `offline` comes
+from `useOffline()`, for the reason ADR-036-era `OfflineBanner` already documents:
+`navigator.onLine` reports the network interface and stays `true` on a phone on a
+WiFi with no upstream — which is exactly the case that needs telling.
+
+**What was tried first and does not work, recorded so nobody tries it again.** The
+natural fix is to wrap the action: race it against a timer and return an error when
+the deadline passes. That was built, tested, and shipped to a real browser. The
+timer fired, the wrapper returned — and React discarded the value.
+
+The reason is specific and worth keeping. React does not take the result from the
+promise the action returned once a Server Action has been dispatched; it takes it
+from the server round-trip. The same wrapper, returning *immediately* without
+dispatching anything, was picked up and rendered within 530ms. Dispatching is
+precisely what costs us the return value. **A deadline cannot be enforced from
+inside the action**, which is why this is a hook and not a wrapper.
+
+**Consequence.** A timed-out write is reported as "we could not confirm it saved",
+never as "that did not save", because the write may still be applied — which it did,
+during the session this was written after. For a ledger, an entry appearing twice
+is worse than one that takes an extra moment to acknowledge itself, and only the
+user can tell the difference. The blocked message says outright that nothing was
+saved, because in that path it is true.
+
+`OfflineBanner`'s copy changed to match. It promised "anything you save will wait
+for a connection", and nothing queues — the `outbox` store exists and is never
+written to. A banner describing an intention is worse than a plain one.
+
+**Not solved.** Nothing is queued, so closing the tab still discards an in-flight
+write, and the outbox remains phase-4 work. The 10-second deadline only bounds how
+long the user is left waiting; it does not make offline writes possible.

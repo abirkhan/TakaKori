@@ -1,15 +1,16 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createCategoryAction, type ActionState } from '@/actions/transactions'
 import { Alert } from '@/components/ui/Alert'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 
 export function CategoryForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useWriteAction<ActionState>(
     createCategoryAction,
     {},
   )

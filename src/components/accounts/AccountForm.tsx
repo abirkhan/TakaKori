@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createAccountAction, type ActionState } from '@/actions/transactions'
 import { Modal } from '@/components/ui/Modal'
@@ -8,6 +8,7 @@ import { useUrlSheet } from '@/components/ui/useUrlSheet'
 import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 
 const KINDS = [
   { value: 'cash', label: 'Cash' },
@@ -79,7 +80,7 @@ function AccountFields({
  * adding an account that already exists rather than opening a new one.
  */
 export function AccountForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useWriteAction<ActionState>(
     createAccountAction,
     {},
   )

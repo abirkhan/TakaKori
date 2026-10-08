@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState, useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import type { ActionState } from '@/actions/transactions'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
 import { Alert } from '@/components/ui/Alert'
@@ -71,7 +72,7 @@ export function WriteForm({
   className?: string
   children: ReactNode
 }) {
-  const [state, formAction] = useActionState<ActionState, FormData>(action, {})
+  const [state, formAction] = useWriteAction<ActionState>(action, {})
 
   useWriteInvalidation(state.success, kind)
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createRecurringAction, type ActionState } from '@/actions/planning'
 import type { Account, Category } from '@/lib/queries/reference'
@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { buttonClass } from '@/components/ui/button'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 
 // Monthly first, because it is the common case: rent, salary, a phone bill.
 // The select's first entry is its default, so ordering here is behaviour.
@@ -40,7 +41,7 @@ export function RecurringForm({
   categories: Category[]
   today: string
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useWriteAction<ActionState>(
     createRecurringAction,
     {},
   )

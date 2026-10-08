@@ -1,16 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, useActionState, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signIn, type ActionState } from '../actions'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 import { Alert } from '@/components/ui/Alert'
 import { CheckboxField, PasswordField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { GoogleSignIn } from '@/components/app/GoogleSignIn'
 
 export function SignInForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(signIn, {})
+  const [state, formAction, pending] = useWriteAction<ActionState>(signIn, {})
 
   /**
    * Held here rather than left to the DOM because **two paths sign in, not one.**

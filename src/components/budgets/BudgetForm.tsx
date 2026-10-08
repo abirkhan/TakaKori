@@ -1,15 +1,15 @@
 'use client'
 
-import { useActionState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { createBudgetAction, type ActionState } from '@/actions/planning'
 import type { Category } from '@/lib/queries/reference'
 import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 
 export function BudgetForm({ categories }: { categories: Category[] }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(createBudgetAction, {})
+  const [state, formAction, pending] = useWriteAction<ActionState>(createBudgetAction, {})
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.

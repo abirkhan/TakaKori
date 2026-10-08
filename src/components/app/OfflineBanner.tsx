@@ -12,11 +12,21 @@ import { Icon } from '@/components/ui/Icon'
  * one. A banner that cries wolf about a condition the audience lives in
  * teaches people to ignore banners.
  *
- * The wording is chosen for what is about to happen rather than for the fact:
- * a user who loses signal mid-form is about to have a submission wait, and
- * saying so is more use than announcing the absence of a network. The second
- * sentence is also the promise the offline work in `docs/spa-pwa-feasibility.md`
- * has to keep — a cached figure is only honest if the app says it is cached.
+ * The wording used to say "anything you save will wait for a connection". That was
+ * a promise the app did not keep, and it is worth recording why it was there and
+ * why it went, because the second version is less appealing and more true.
+ *
+ * It was written when reads were the only thing believed to work offline, and it
+ * was the friendliest possible reading of a queued write. But nothing queues. The
+ * `outbox` store exists and is never written to, so a submission made offline did
+ * not wait for anything — it sat on a socket that was never going to answer, which
+ * is the bug `useWriteAction` was written to bound. The banner was describing an
+ * intention.
+ *
+ * So it now says the plain thing: reading works, saving does not. The second
+ * sentence is unchanged and still the promise the offline work in
+ * `docs/spa-pwa-feasibility.md` has to keep — a cached figure is only honest if
+ * the app says it is cached.
  *
  * **It is not dismissible.** Connectivity is not the user's decision, and a
  * dismissed connectivity banner is a wrong one.
@@ -45,8 +55,8 @@ export function OfflineBanner() {
       <div className="tk-alert tk-alert-info m-3 mb-0">
         <Icon name="info" size={17} className="mt-px shrink-0" />
         <span>
-          <strong className="font-semibold">Offline.</strong> Anything you save will wait for a
-          connection. Figures on screen are from the last time this device synced.
+          <strong className="font-semibold">Offline.</strong> You can read your figures, but saving
+          needs a connection. Figures on screen are from the last time this device synced.
         </span>
       </div>
     </div>

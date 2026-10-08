@@ -1,11 +1,12 @@
 'use client'
 
-import { useActionState, useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Modal } from './Modal'
 import { buttonClass } from './button'
 import { Alert } from './Alert'
 import { notifySuccess } from '@/components/app/Toast'
 import type { ActionState } from '@/actions/transactions'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
 
@@ -62,7 +63,8 @@ export function ConfirmDeleteSheet({
   /** Extra context, e.g. the record's own amount. */
   children?: ReactNode
 }) {
-  const [state, formAction] = useActionState<ActionState, FormData>(action, {})
+  /** `useMemo` because the action is a prop; see the note in `WriteForm`. */
+const [state, formAction] = useWriteAction<ActionState>(action, {})
 
   // Clears the cache at the moment of the write. Without it a deleted
   // transaction leaves its own amount in the total balance until a hard reload.

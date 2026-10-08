@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import { updateTransactionAction, type ActionState } from '@/actions/transactions'
 import type { ExportableTransaction } from '@/lib/csv'
@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/Alert'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { notifySuccess } from '@/components/app/Toast'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 
 interface EditableTransaction extends Pick<
   ExportableTransaction,
@@ -47,7 +48,7 @@ export function EditTransactionSheet({
   open: boolean
   onClose: () => void
 }) {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useWriteAction<ActionState>(
     updateTransactionAction,
     {},
   )

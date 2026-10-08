@@ -1,14 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 import { signUp, type ActionState } from '../actions'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 import { Alert } from '@/components/ui/Alert'
 import { PasswordField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 
 export function SignUpForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(signUp, {})
+  const [state, formAction, pending] = useWriteAction<ActionState>(signUp, {})
 
   /**
    * Controlled, for the same reason as the sign-in form and with more to lose.

@@ -1,14 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useState } from 'react'
+import { useState } from 'react'
 import { requestPasswordReset, type ActionState } from '../actions'
+import { useWriteAction } from '@/lib/client/useWriteAction'
 import { Alert } from '@/components/ui/Alert'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 
 export function ForgotPasswordForm() {
-  const [state, formAction, pending] = useActionState<ActionState, FormData>(
+  const [state, formAction, pending] = useWriteAction<ActionState>(
     requestPasswordReset,
     {},
   )
