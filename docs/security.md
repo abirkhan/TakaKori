@@ -112,8 +112,12 @@ ignored.
 
 ## Secrets
 
-- The service-role key bypasses RLS entirely. It is not used anywhere in this
-  repository and has no `NEXT_PUBLIC_` prefix.
+- The service-role key bypasses RLS entirely, so it must never reach a request path.
+  It has no `NEXT_PUBLIC_` prefix and appears in **exactly one place**: `scripts/seed.ts`,
+  which provisions the local fixture data. The claim that used to read "not used
+  anywhere in this repository" was wrong — correct, but wrong, and a claim that is
+  wrong in the safe direction still trains a reader to distrust the whole document.
+  What matters is the invariant, and that is checked below.
 - `.env.local` is gitignored; `.env.example` holds placeholders only.
 - Never log a session token, a full user object, or an auth header.
 

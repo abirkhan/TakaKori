@@ -18,7 +18,10 @@ config({ path: '.env.local', quiet: true, override: false })
  *   - the dev server running (`npm run dev`)
  *   - .env.test with a throwaway account's credentials (see .env.test.example)
  *
- * Cleanup runs as a script with the service-role key, never as an HTTP route.
+ * Cleanup runs through the app's own delete button, driven as a signed-in user, not
+ * through a service-role script and not through a test-only HTTP route. That is what
+ * keeps the suite honest: it exercises the same authorisation the product does, so a
+ * route that only tests could reach would fail here rather than pass.
  */
 export default defineConfig({
   testDir: './e2e',
