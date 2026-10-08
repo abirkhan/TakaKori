@@ -228,14 +228,34 @@ export function CheckboxField({
         aria-describedby={hint ? hintId : undefined}
         className="tk-check mt-0.5"
       />
-      <label htmlFor={id} className="cursor-pointer">
-        <span className="tk-body block">{label}</span>
+      {/*
+       * The hint is a **sibling** of the label, not a child of it.
+       *
+       * Wrapping both in one `<label>` is the obvious shape and it is wrong: a
+       * label's whole subtree becomes the control's accessible name. With the hint
+       * inside, the a11y tree for this checkbox read
+       *
+       *   "Keep me signed in on this device Otherwise you will be signed out when
+       *    you close the browser."
+       *
+       * as the *name* — and `aria-describedby` then announced the same sentence a
+       * second time as the description. So the fix is not to drop
+       * `aria-describedby`; it is to stop the hint being part of the name.
+       *
+       * `htmlFor` still ties the label text to the input, so tapping the words
+       * still toggles the box. Only the hint stops being a tap target, which is
+       * the right trade: it is an explanation, not a second control.
+       */}
+      <div className="min-w-0">
+        <label htmlFor={id} className="tk-body block cursor-pointer">
+          {label}
+        </label>
         {hint && (
-          <span id={hintId} className="tk-caption mt-0.5 block">
+          <p id={hintId} className="tk-caption mt-0.5">
             {hint}
-          </span>
+          </p>
         )}
-      </label>
+      </div>
     </div>
   )
 }
