@@ -1309,3 +1309,43 @@ conflict reporting are therefore not in tension.
 evicted on iOS and is unavailable in Safari private mode, which is why ADR-043
 requires the UI to say a queued write is saved **on this device** rather than
 saved.
+
+## ADR-043 - A queued write may fail loudly, because it is not a cache
+
+**Context.** `src/lib/client/idb.ts` fails soft everywhere, and the header
+justifies it: *"Everything here fails soft… A cache that throws takes the app down
+with it, so every operation resolves rather than rejects, and a missing database is
+indistinguishable from an empty one. The caller is a cache: losing it must mean
+'fetch again', never 'crash'."* That reasoning is correct for the `cache` store and
+**wrong for `outbox`**. A user who spends money offline and is told "saved", and
+whose entry then evaporates, has been lied to in the exact case where being lied to
+costs them trust in their own ledger.
+
+**Decision.**
+
+1. **A failed enqueue is a visible failure, never a silent success.** `idbSet`
+   already distinguishes the two without changing: an IDB `put` resolves with the
+   key on success, so `idbSet` returns a string on success and `null` on failure,
+   on a blocked upgrade, or when IndexedDB is missing entirely. The outbox treats
+   that `null` as failure. `idb.ts` is **not modified** — its fail-soft posture
+   stays exactly right for the cache, and the outbox simply refuses to inherit it.
+2. **If the write cannot be queued at all, the UI says so.** Safari private mode
+   and a storage-full iOS device make the outbox unavailable. The message names the
+   real problem rather than confirming a save that did not happen.
+3. **The wording is "saved on this device", never "saved".** ADR-042 makes replay
+   converge; it cannot make the queue durable against eviction. The distinction is
+   the honest one and it is also the useful one, because the user is being told
+   something they can act on — open the app again somewhere with a connection.
+4. **A permanent failure and a retryable failure are different events.** A duplicate
+   category name will never succeed on its own, so the drain marks that row failed
+   with the real reason and carries on. A network error will fail every remaining
+   row too, so the drain **stops** rather than firing one doomed request per queued
+   write. Ten queued writes must not become ten timeouts.
+5. **Drains are triggered deliberately**: on app open, and on `online` while
+   foregrounded. Safari will not drain a queue in the background, so the UI says
+   that rather than implying a background sync exists.
+
+**Consequence.** The outbox reports failures the cache cannot, which means it needs
+its own error path — `enqueue` returns a result instead of the `void` the cache's
+`idbSet` callers expect. That asymmetry is the point, and it is why the two stores
+share a module but not a contract.
