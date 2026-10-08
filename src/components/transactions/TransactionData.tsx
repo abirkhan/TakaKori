@@ -12,6 +12,7 @@ import { keys } from '@/lib/client/invalidations'
 import { TransactionFilters } from '@/components/transactions/TransactionFilters'
 import { TransactionSheetHost } from '@/components/transactions/TransactionSheetHost'
 import { TransactionList, type TransactionRowView } from '@/components/transactions/TransactionList'
+import { PendingWrites } from '@/components/transactions/PendingWrites'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Icon } from '@/components/ui/Icon'
@@ -173,6 +174,12 @@ function TransactionsBody() {
           <TransactionFilters accounts={accounts.data} categories={categories.data} />
         ) : null}
       </Suspense>
+
+      {/* Writes held on this device, above the list and outside it. They are not
+          transactions — no server id, not in any total, not filtered or paged — so
+          rendering them as rows would imply they had been counted. See
+          `PendingWrites`. */}
+      <PendingWrites />
 
       {/* The list owns the screen. Adding a transaction used to be a six-field form
           occupying the entire first screenful of the screen the user opened to

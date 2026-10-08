@@ -131,6 +131,33 @@ export const indexedDbOutbox: OutboxStore = {
 }
 
 /**
+ * Listeners for "the queue changed".
+ *
+ * **Why this exists at all.** A queued write is the only thing in the app the
+ * server has not seen, so if nothing re-reads the outbox after it changes, a user
+ * can record an expense offline, be told it is saved on this device, and have no
+ * way to find it again until a connection happens to drain it. That is the entry
+ * looking lost, which is the outcome this feature exists to prevent — so the queue
+ * announces itself, and the UI shows what is held.
+ *
+ * Deliberately a module-level set rather than a hook or context, for ADR-038's
+ * reason: writes arrive from forms, sheets and buttons across five screens, and a
+ * subscription must not be something a caller can forget to set up.
+ */
+const listeners = new Set<() => void>()
+
+function announce(): void {
+  for (const listener of listeners) listener()
+}
+
+export function subscribeToOutbox(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
  * Store a write for later.
  *
  * Returns whether it was stored, rather than assuming. A caller that ignores this
@@ -141,7 +168,11 @@ export async function enqueue(
   write: Omit<QueuedWrite, 'status' | 'attempts'>,
   store: OutboxStore = indexedDbOutbox,
 ): Promise<boolean> {
-  return store.put({ status: 'queued', attempts: 0, ...write })
+  const stored = await store.put({ status: 'queued', attempts: 0, ...write })
+  // Announced only on success. A failed enqueue changes nothing for a subscriber to
+  // notice, and the caller is about to render an error instead.
+  if (stored) announce()
+  return stored
 }
 
 export interface DrainResult {
@@ -202,9 +233,19 @@ export async function drain(
     failed += 1
 
     if (result.retryable) {
+      /**
+       * Announced on the way out as well as on the way in, and the ordering is the
+       * whole fix. Announcing only before the loop meant a subscriber re-read the
+       * queue while every row was still in it, and nothing ever announced again —
+       * so the UI kept showing "waiting to sync" for transactions that had already
+       * been written, indefinitely, until something unrelated caused a re-read. A
+       * pending row that never clears teaches users that the label is decoration.
+       */
+      announce()
       return { applied, failed, remaining: writes.length - applied - failed, stopped: true }
     }
   }
 
+  announce()
   return { applied, failed, remaining: writes.length - applied - failed, stopped: false }
 }
