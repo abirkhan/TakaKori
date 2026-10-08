@@ -1289,16 +1289,34 @@ required** — the feasibility study lists this as work, but it predates the sch
 already in the state it asked for.** Applied is not the same as inserted, and an
 outbox that insists on the second will duplicate the first.
 
-**Deliberately unresolved.** Whether a PostgREST unique-violation names the
-constraint, so a primary-key replay could be told from a genuine name conflict in a
-single round trip. `src/lib/queries/reference.ts:98` checks only `code === '23505'`
-and cannot answer it, and a spike to read the raw error body did not complete: the
-service-role key in `.env.local` returns `401 Invalid API key`, so it has never
-been a working key, and the session-token route needs more work than the question
-deserves. **The design above does not depend on the answer**, which is why
-read-before-replay was chosen over a cheaper "treat `23505` as applied" rule. That
-shorter rule would misreport a genuine duplicate category name as a successful
-replay.
+**Deliberately unresolved, then resolved.** Whether a PostgREST unique violation
+names the constraint, so a primary-key replay could be told from a genuine name
+conflict in a single round trip. `src/lib/queries/reference.ts:98` checks only
+`code === '23505'` and cannot answer it. **Answered, against the real table:**
+
+- Inserting a transaction with an explicit client-generated uuid **succeeds**, which
+  is the load-bearing half — the `default gen_random_uuid()` does not override a
+  value the client supplies.
+- Inserting the same uuid again is **rejected**: `23505: duplicate key value
+  violates unique constraint "transactions_pkey"`, with `DETAIL: Key (id)=(…)
+  already exists.`
+- The row count for that id stayed at **1**, and the row's description was
+  unchanged by the rejected insert.
+
+That last point is what makes the design work rather than merely not crash: the
+rejected insert neither duplicated the row nor overwrote it. A user who edits a
+transaction after queueing it does not get their edit reverted on the next drain.
+
+The constraint **is** named, so the cheaper "one round trip" rule is available
+after all: a `23505` naming `_pkey` is a replay, and a `23505` naming any other
+index is a genuine conflict. **Read-before-replay is kept regardless.** It is one
+extra round trip on a path that runs once per queued write during a drain, and it
+has the property that a failure mode is a failed read rather than a duplicate row —
+the right side to err on for a ledger. The cheaper rule would misreport a genuine
+duplicate category name as a successful replay if the constraint name were ever
+absent from the error.
+
+Spike rows were deleted; the account was left as found.
 
 **Consequence.** A genuine conflict — a second category called "Food" — still
 surfaces as an error naming the real problem, because that failure happens on
