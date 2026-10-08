@@ -61,8 +61,15 @@ emulation), and Netlify headers (deploy-time only).
 Goal: one user can sign up, add a transaction, and see it on a dashboard.
 
 - [x] **Auth pages** — signup, login, logout, email confirmation, password reset
-- [x] **Google OAuth** — PKCE via route handlers; needs the provider enabled in
-      the dashboard plus the `{SITE_URL}/auth/callback/google` redirect URL
+- [x] **Google OAuth** — client-side PKCE (ADR-036; the two route handlers are
+      deleted). Verified end-to-end in a browser: the authorize request is built
+      with the right `client_id`, `scope` and `redirect_to`; Supabase accepts the
+      redirect only if it is allowlisted; the code verifier is written to
+      `document.cookie` before leaving and read back after the round-trip; the
+      exchange yields a session that survives a reload; and the Google identity
+      **links** to the existing user — one user in the project with providers
+      `email,google` — so no data is orphaned. `next` is honoured on arrival and
+      both open-redirect vectors (`https://…` and `//…`) are refused.
 - [x] **Transactions** — create, read, update, delete
 - [x] **Accounts and categories** — create and list
 - [x] **Dashboard** — total balance, month income/expense/savings, recent
