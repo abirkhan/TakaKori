@@ -1243,3 +1243,69 @@ out.
 
 Verified in a browser: three consecutive offline attempts each produce their toast,
 and a successful delete still announces exactly once.
+
+## ADR-042 - A queued write converges when replayed, and is never upserted
+
+**Context.** Offline writing means a write is retried, and a retry that is not
+idempotent is a financial record written twice. The inventory found the position
+this starts from, and it is worse than "not yet handled":
+
+- **No `upsert` and no `onConflict` anywhere in `src/`.** Nine distinct mutations,
+  none of them an upsert.
+- **`transactions` has no unique constraint.** Three indexes, all non-unique
+  (`20260930184509_initial_schema.sql:158`, `:161`, `:164`). So a replayed
+  transaction create **produces a second row**, and nothing in the system can tell
+  the two apart afterwards.
+- The budget and category guards are *uniqueness* constraints, not idempotency
+  keys. Replaying a queued budget surfaces *"You already have an overall spending
+  budget"* — a replay presented to the user as their own mistake.
+
+**What makes it solvable: the primary key already accepts a client-chosen value.**
+`transactions.id` is `uuid primary key default gen_random_uuid()`. The default
+applies only when `id` is omitted, so the browser may supply its own. The same
+holds for `accounts`, `categories` and `recurring_transactions`. **No migration is
+required** — the feasibility study lists this as work, but it predates the schema.
+
+**Decision. Converge by reading, not by upserting.**
+
+1. Every queued create carries a `crypto.randomUUID()` generated in the browser at
+   the moment the user pressed save, stored on the outbox row and used as the
+   `id` of the insert.
+2. Before replaying, the drain **reads** `select id … where id = <that uuid>`. Found
+   means the write already landed and the op is dropped. Absent means it inserts.
+3. **Never `upsert`.** This is the part that matters. An upsert on `id` would
+   converge, but it would also *overwrite*: a row the user has since edited would be
+   reverted to the payload that was queued, which is silent data loss. Insert plus
+   read converges without ever writing over a newer row.
+4. **Deletes are unconditional by id, and absent counts as success.** "Delete this
+   transaction" is an intent about *existence*, not about content, so an edit
+   elsewhere does not change what the user asked for. Replaying a delete whose row
+   is already gone is convergence, not an error.
+5. `postRecurringOccurrence` is already idempotent and needs none of this. Its
+   watermark raises `23505` *"That occurrence has already been posted"* — which is
+   precisely the already-applied signal, from the database, atomically.
+
+**The general rule this amounts to: a queued write succeeds when the database is
+already in the state it asked for.** Applied is not the same as inserted, and an
+outbox that insists on the second will duplicate the first.
+
+**Deliberately unresolved.** Whether a PostgREST unique-violation names the
+constraint, so a primary-key replay could be told from a genuine name conflict in a
+single round trip. `src/lib/queries/reference.ts:98` checks only `code === '23505'`
+and cannot answer it, and a spike to read the raw error body did not complete: the
+service-role key in `.env.local` returns `401 Invalid API key`, so it has never
+been a working key, and the session-token route needs more work than the question
+deserves. **The design above does not depend on the answer**, which is why
+read-before-replay was chosen over a cheaper "treat `23505` as applied" rule. That
+shorter rule would misreport a genuine duplicate category name as a successful
+replay.
+
+**Consequence.** A genuine conflict — a second category called "Food" — still
+surfaces as an error naming the real problem, because that failure happens on
+`insert` after the read said the id was absent. Replay convergence and honest
+conflict reporting are therefore not in tension.
+
+**Consequence.** Nothing here makes a queued write *durable*. IndexedDB can be
+evicted on iOS and is unavailable in Safari private mode, which is why ADR-043
+requires the UI to say a queued write is saved **on this device** rather than
+saved.
