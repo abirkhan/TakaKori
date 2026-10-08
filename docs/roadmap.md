@@ -36,9 +36,20 @@ reads as broken rather than unavailable. The other five keep a prerendered shell
 and their Add links, filter controls and export are real `<a>` and `<Link>`
 elements, so the paths in still work without a bundle.
 
-**Not verified, and not verifiable from a dev machine:** a real Google OAuth
-round-trip (needs interactive consent), true offline navigation (needs network
-emulation), and Netlify headers (deploy-time only).
+**Verified since this table was written, by driving a real browser:**
+
+- A Google OAuth round-trip, end to end — see Phase 1. Previously "not verifiable
+  from a dev machine"; it needed a person to click Google's consent screen, which
+  is what made it possible.
+- True offline navigation, with the network severed at the browser and an
+  uncached request confirmed to fail. Reload and cold navigation both serve the
+  cached shell with figures from IndexedDB, the offline banner appears, and an
+  offline save now returns an error in ~500ms instead of hanging (ADR-041).
+
+**Still not verified, and not verifiable from a dev machine:** the Netlify
+`[[headers]]` entry for `/sw.js`, which only executes during a deploy. A cached
+worker script means a user runs last week's offline behaviour against this week's
+JavaScript, so this is worth a preview deploy before production.
 
 ## Phase 0 — Foundation ✅
 
