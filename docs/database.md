@@ -184,3 +184,38 @@ Rules:
 - Every new table ships with RLS enabled and policies in the same migration.
 - Regenerate TypeScript types after every schema change and commit them.
 - Never run DDL against production by hand.
+
+### The filename is the migration's identity, so apply it as a file
+
+**Applying a migration through a tool that records its own version desynchronises
+`db push`, and the result is not obvious.** Three migrations in this project were applied
+out of band — two early, and `account_adjustments` through the Supabase MCP's
+`apply_migration`. The remote history recorded the tool's timestamps
+(`20261006130644`, `20261006130810`, `20261009043814`) while the files on disk were named
+`20261006120000`, `20261006120100`, `20261009090000`.
+
+The consequence is a `db push` that wants to re-apply three migrations that are already
+applied. Two of them are `create or replace function` and would silently do nothing.
+The third is **not idempotent** — `create policy` and `create trigger` without
+`if not exists` both error when the object is there — so the push fails partway through,
+after having applied nothing and with no indication of why.
+
+Reconcile rather than re-apply:
+
+```bash
+# what the remote thinks it has, against what is on disk
+npx supabase migration list
+ls supabase/migrations/
+
+# for each drifted version, once the schema is verified to match the file
+npx supabase migration repair --status applied 20261009090000 account_adjustments
+```
+
+Verify the schema against the file before repairing, not after. `migration repair` only
+edits the history table — it applies nothing — so repairing a version whose DDL was
+*not* actually run leaves the history claiming a migration that never happened, and the
+next `db push` will skip it forever.
+
+`supabase login` is interactive, so an agent cannot run `link` or `push` unattended.
+Everything above can be done through the MCP's `execute_sql` instead, which is how the
+three versions here were reconciled.

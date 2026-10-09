@@ -47,7 +47,12 @@ These are not preferences. Violating them produces silent, hard-to-debug bugs.
    `user_id`. Ownership derives through `workspace_members`.
 7. **Date ranges are computed in the user's timezone**, never UTC.
 8. **Transfers are not income or expense.** `type` is one of `income`, `expense` or `transfer`, and a transfer must have a `counterparty_account_id`.
-9. **Migrations only.** Never change the schema through the Supabase dashboard.
+9. **Migrations only.** Never change the schema through the Supabase dashboard. Apply a
+   migration **as a file** too — a tool that assigns its own version (the MCP's
+   `apply_migration`, for instance) records a version the filename does not match, and the
+   next `db push` then tries to re-apply an already-applied migration. `db push` needs
+   `supabase login`, which is interactive; see `docs/database.md` for the drift and
+   `migration repair`.
 10. **Never commit or expose the service-role key.** Nothing here needs it.
 11. **UI follows `docs/design-system.md`.** No raw palette classes (`text-emerald-700`),
     no `dark:` variants, no new fonts, no icon or charting library, and money is
