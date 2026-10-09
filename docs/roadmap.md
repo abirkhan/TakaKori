@@ -1,12 +1,14 @@
 # Roadmap
 
-Status: **Product phases 0–3 complete.** A separate programme is converting the
-app to a client-data single-page app with offline reads; see
+Status: **Product phases 0–3 complete.** A separate programme converted the app to
+a client-data single-page app with offline reads and offline writes; see
 [`spa-pwa-feasibility.md`](./spa-pwa-feasibility.md) for its six phases and
-[`decisions.md`](./decisions.md) ADR-032 through ADR-037 for what has been
+[`decisions.md`](./decisions.md) ADR-032 through ADR-045 for what has been
 decided since.
 
-The **read** half of that programme is done. The write half is not.
+**Both halves of that programme are done.** The table below previously said the
+write half had not started; it had, and the claim was stale by the time it was
+written.
 
 | Step                                      | State                                                    |
 | ----------------------------------------- | -------------------------------------------------------- |
@@ -15,16 +17,21 @@ The **read** half of that programme is done. The write half is not.
 | Cache invalidation map                    | Done, and it caught a live stale-balance bug on the way  |
 | Client data on **all seven** screens      | Done — no screen reads through `queries/server` any more |
 | Writes clear the cache                    | Done — every mutating action now returns a result        |
-| Mutations run in the client               | **Not started** — see below                              |
-| Offline writes (outbox)                   | **Deliberately not started** — see below                 |
+| Mutations run in the client               | Done — ADR-041; the action's result owns `pending`       |
+| Offline writes (outbox)                   | Done — ADR-042 and ADR-043; "saved on this device"       |
 
-**Three things worth knowing before touching this area again:**
+**Four things worth knowing before touching this area again:**
 
 The read path was converted _before_ the writes that could invalidate it. For a
 window of commits a purchase wrote its row and the dashboard kept showing the
-balance from before it. That is closed — `useWriteInvalidation` is wired into all
-eleven call sites — but it is why the order mattered, and why the outbox waits.
-Queuing writes against unverified read-invalidation is worse than having no offline
+balance from before it. `useWriteInvalidation` closes it — wired into thirteen
+call sites, and its identity is `(done, attempt)` rather than the success value,
+because two consecutive successes return the same string and the second was being
+swallowed. That is the ADR-012 shape: a stale balance beside a row list that *had*
+updated.
+
+Queuing writes was deliberately sequenced behind verifying read-invalidation.
+Queuing writes against unverified invalidation is worse than having no offline
 support at all.
 
 **Two screens no longer render without JavaScript.** `/reports` and
@@ -45,11 +52,23 @@ elements, so the paths in still work without a bundle.
   uncached request confirmed to fail. Reload and cold navigation both serve the
   cached shell with figures from IndexedDB, the offline banner appears, and an
   offline save now returns an error in ~500ms instead of hanging (ADR-041).
+- Offline replay of `transaction.create`, proven against the real table: a queued
+  write drains, a replayed insert is rejected naming `transactions_pkey`, the row
+  count stays at 1, and a description edited after queueing is not overwritten.
 
-**Still not verified, and not verifiable from a dev machine:** the Netlify
-`[[headers]]` entry for `/sw.js`, which only executes during a deploy. A cached
-worker script means a user runs last week's offline behaviour against this week's
-JavaScript, so this is worth a preview deploy before production.
+**Still not verified.** Ten queued write kinds are implemented and nine are wired
+to call sites, but only `transaction.create` has been driven through the UI. The
+one that was found three invisible bugs in — an IndexedDB `DataError`, a sheet
+stuck open offline, a drain that announced before doing work — is the reason the
+other nine deserve the same distrust.
+
+**And still not verifiable from a dev machine:** the Netlify `[[headers]]` entry
+for `/sw.js`. Measured, not assumed: `https://takakori.netlify.app/sw.js` returns
+**404**, because production runs `origin/main` and `public/sw.js` does not exist
+there — it is on branch `X1`, 26 commits ahead. So the offline half of this
+programme is not live at all. A cached worker script means a user runs last week's
+offline behaviour against this week's JavaScript, so a preview deploy is the next
+step before production.
 
 ## Phase 0 — Foundation ✅
 
@@ -61,11 +80,25 @@ JavaScript, so this is worth a preview deploy before production.
 - [x] `lib/dates.ts` with timezone-aware range resolution
 - [x] `lib/validations.ts` Zod schemas
 - [x] `lib/auth.ts` session guards
-- [x] 49 unit tests (178 as of the client-data programme — see above)
+- [x] 295 unit tests (49 at Phase 0, 178 through the client-data programme — see above)
 - [x] `npm run verify` green (typecheck, lint, test, build)
 - [x] Documentation, 6 agent skills, `AGENTS.md`
-- [ ] **`supabase login` + `supabase db push`** — needs interactive login
-- [ ] **Netlify site connected** — needs dashboard access
+- [x] **Netlify site connected** — verified: `takakori.netlify.app` answers `/`
+  and `/login` with 200. See [Deployment](#deployment) for what that deploy is and
+  is not.
+- [ ] **`supabase login` + `supabase db push`** — **still open, and it is the only
+  item left in Phase 0.** The schema is applied and verified; what is missing is the
+  CLI *history* agreeing with it.
+
+  Three migrations were applied out of band and recorded under a tool's timestamp
+  rather than the filename (`20261006130644`, `20261006130810`, `20261009043814` vs
+  `20261006120000`, `20261006120100`, `20261009090000`). The versions are now
+  reconciled and the schema verified to match the files, so a push should be a no-op.
+  See `docs/database.md` for the drift and the repair procedure.
+
+  What blocks it is credentials, not work: `supabase login` is interactive, and the
+  CLI rejects the legacy `cli_<user>@<host>_<timestamp>` token format. It wants a
+  personal access token — `sbp_…` — from the Supabase dashboard.
 
 ## Phase 1 — Vertical slice
 
@@ -92,34 +125,29 @@ Goal: one user can sign up, add a transaction, and see it on a dashboard.
       invariants rejected, reconciliation checked
 - [x] **Seed script** — `npm run seed`, asserts the ADR-012 invariant
 
-### Blocked on one thing
+### Blocked on one thing — since resolved
 
-The app renders and the API correctly rejects unauthenticated access, but **no
-signed-in session has been exercised yet.**
+This section used to read "no signed-in session has been exercised yet". It has:
+47 E2E tests run against the linked project, every one of them signed in.
 
-Free-tier Supabase caps outbound email, so signup returns
-`429 over_email_send_rate_limit` and no confirmation link is ever sent. Writing
+The blocker was that free-tier Supabase caps outbound email, so signup returned
+`429 over_email_send_rate_limit` and no confirmation link was ever sent. Writing
 rows into `auth.users` by hand is not a workaround: GoTrue keeps
 `auth.identities.email` as a generated column and returns
 `500 Database error querying schema` for a hand-made identity row.
 
-Two supported ways out, either is enough:
+It was resolved by adding a service-role key to `.env.local` and running
+`npm run seed`, which uses `auth.admin.createUser({ email_confirm: true })` and
+so bypasses email entirely. The key is gitignored and has never been committed.
 
-1. **Add a service-role key** and run `npm run seed`. One line in `.env.local`:
+### A consequence of `NEXT_PUBLIC_SITE_URL`
 
-   ```
-   SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
-   ```
-
-   The script uses `auth.admin.createUser({ email_confirm: true })`, which
-   bypasses email entirely.
-
-2. **Disable "Confirm email"** in Supabase → Authentication → Providers →
-   Email. Signup then returns a session immediately. Simplest for local work,
-   but must be turned back on before any public launch.
-
-Charts come after the data is trustworthy. A chart of a wrong number is worse
-than no chart.
+That variable is now set in `.env.local` to `https://takakori.netlify.app`, which
+is correct for the deployed app — but `.env.local` is what the **dev** server
+reads. Email-confirmation and password-reset links generated locally therefore
+redirect to production rather than to localhost. That is harmless while
+production is the only deploy, and worth knowing before testing either flow
+against a local build.
 
 ## Phase 2 — Reports ✅
 
@@ -144,8 +172,8 @@ replace if reports ever need genuinely complex charts.
 
 ### Still open
 
-- [ ] **Google OAuth** — provider must be enabled in the Supabase dashboard
-- [ ] **Netlify** — not connected; needed for deploy previews
+- [ ] ~~**Google OAuth**~~ — done and verified end to end; see above
+- [x] **Netlify** — connected, and serving
 
 ---
 
@@ -232,27 +260,35 @@ Two bugs found and fixed during this phase:
   the anchor date — which is by definition before the cursor.
 - Budget days-elapsed was exclusive, understating the daily rate by a day.
 
-The schema already supports transfers; only the UI is missing.
+## Phase 4 — Polish and reach
 
-- Transfer form
-- Per-account balances (`account_balances` view)
-- Account management UI
-- Multiple accounts (Cash, bank, bKash, Nagad, card)
+Not started. An earlier version of this file had a second heading also numbered
+"Phase 3", directly beneath the first, which made it impossible to tell what was
+proposed from what was shipped.
 
-## Phase 3 — Polish and reach
-
-- Reports: monthly trend, category breakdown, custom ranges
-- Recurring transactions
-- Budgets
 - Bangla (`bn-BD`) localisation
 - Onboarding
 - Sentry for production errors
 
+### Previously listed here and now done
+
+The list under this heading once read "The schema already supports transfers;
+only the UI is missing" and named four gaps. All four shipped:
+
+- Transfer form — in `AddTransactionSheet`, and E2E-covered end to end
+- Per-account balances (`account_balances` view)
+- Account management UI — create, edit, archive, remove
+- Multiple accounts — Cash, bank, bKash, Nagad, card
+
+Balance **corrections** also landed here afterwards, as an `account_adjustments`
+table rather than a fourth transaction type (ADR-045), with a visible breakdown of
+where a balance comes from.
+
 ## End-to-end tests ✅
 
 `npm run test:e2e` drives a real browser against the linked development
-project — 10 tests, all passing. Credentials come from `.env.test`
-(gitignored); see `.env.test.example`.
+project — **47 tests, all passing** (10 at this section's last edit). Credentials
+come from `.env.test` (gitignored); see `.env.test.example`.
 
 Covered: unauthenticated redirect, dashboard rendering, creating an expense and
 watching the total move, a transfer moving money between accounts **without**
