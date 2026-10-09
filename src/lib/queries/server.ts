@@ -103,7 +103,8 @@ export const updateAccount = async (input: {
   id: string
   name: string
   kind: AccountKind
-  openingBalance: string
+  /** Omit to leave it alone. A patch is not a merge — see `updateAccount`. */
+  openingBalance?: string
 }) => updateAccountImpl(await serverContext(), input)
 
 export const deleteAccount = async (input: { id: string }) =>

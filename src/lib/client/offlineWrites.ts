@@ -59,14 +59,26 @@ const COLUMNS: Record<string, Record<string, string>> = {
   },
   'transaction.delete': { id: 'id' },
   'account.create': { name: 'name', kind: 'kind', openingBalance: 'opening_balance' },
-  // `openingBalance` is **required** on the Server Action, and this is why: a patch
-  // is not a merge. Omitting it would write '0.00' over a real balance, and a queued
-  // edit carrying no balance would do that silently, on a device nobody is watching.
+  /**
+   * No `openingBalance`, and that is deliberate rather than an oversight.
+   *
+   * This mapping used to carry it, with a comment explaining that it was *required* on
+   * the Server Action because "a patch is not a merge" — omitting it would write
+   * '0.00' over a real balance. That reasoning was right about the hazard and wrong
+   * about the fix. Making the field mandatory is what forced the edit sheet to show it,
+   * and showing it is what produced the trap this whole screen is now built around: an
+   * account reading ৳5,000.00 pre-filled the field with `0.00`, so the one input
+   * offering to correct the balance held the one number that was not the balance.
+   *
+   * The hazard is now handled where it belongs — `updateAccount` omits the key from
+   * the patch — and the correction goes through `account_adjustments` where it is
+   * visible. A queued account edit carries no balance at all, which is the same patch
+   * the online path makes, so a queued edit and an online edit are the same write.
+   */
   'account.update': {
     id: 'id',
     name: 'name',
     kind: 'kind',
-    openingBalance: 'opening_balance',
   },
   'category.create': { name: 'name', type: 'type' },
   'category.update': { id: 'id', name: 'name', type: 'type' },

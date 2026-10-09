@@ -74,6 +74,18 @@ export const keys = {
    */
   balances: (): string => `${PREFIX.accounts}balances`,
 
+  /**
+   * Corrections against one account.
+   *
+   * Under `accounts:` rather than a new prefix because of the rule at the top of this
+   * file: it shows money, a write changes it, and the write is an account write —
+   * `WRITES.account` already carries `PREFIX.accounts`, so recording or removing a
+   * correction clears the balance *and* this list in one call. A separate `adjustments:`
+   * prefix would have meant updating both, and the failure mode of forgetting is the
+   * ADR-012 one: the balance moves and the ledger beside it still shows the old row.
+   */
+  adjustments: (accountId: string): string => `${PREFIX.accounts}adjustments:${accountId}`,
+
   categories: (type?: string): string => `${PREFIX.categories}list:${type ?? 'all'}`,
 
   transactions: (qualifier: string): string => `${PREFIX.transactions}${qualifier}`,

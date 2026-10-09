@@ -194,13 +194,34 @@ export async function createCategory(
  */
 export async function updateAccount(
   ctx: QueryContext,
-  input: { id: string; name: string; kind: AccountKind; openingBalance: string },
+  input: { id: string; name: string; kind: AccountKind; openingBalance?: string },
 ) {
   const { supabase, workspaceId } = ctx
 
+  /**
+   * `opening_balance` is included **only when the caller supplied it**.
+   *
+   * This is the difference between a patch and a merge, and getting it wrong is
+   * silent data loss rather than an error: PostgREST's `PATCH` only touches the
+   * keys present in the body, so sending `{ opening_balance: undefined }` leaves
+   * the balance alone — but sending the *string* `'0.00'` because a form field was
+   * absent overwrites a real balance with nothing. Verified earlier in this
+   * project: an account showing ৳5,000.00 had `opening_balance` 0.00, which is
+   * exactly that bug, already committed to the database.
+   *
+   * So the caller omitting the field is meaningful and is honoured as "leave this
+   * one alone", and the edit sheet omits it because a correction now goes through
+   * `account_adjustments` where it is visible (ADR-045).
+   */
+  const patch: { name: string; kind: AccountKind; opening_balance?: string } = {
+    name: input.name,
+    kind: input.kind,
+  }
+  if (input.openingBalance !== undefined) patch.opening_balance = input.openingBalance
+
   const { data, error } = await supabase
     .from('accounts')
-    .update({ name: input.name, kind: input.kind, opening_balance: input.openingBalance })
+    .update(patch)
     .eq('id', input.id)
     .eq('workspace_id', workspaceId)
     .select('id')

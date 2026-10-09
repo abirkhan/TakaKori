@@ -479,6 +479,19 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* A supporting money figure: the same weight and tabular alignment as
+     `.tk-amount`, in the muted role. Used where a screen shows one headline
+     figure and several supporting ones — a balance broken into what it is made
+     of, for instance, where the reader's eye should land on the total and find
+     the parts on request. Colour is the only channel here, so the size drop from
+     `.tk-amount` is what actually separates the two roles. */
+  .tk-amount-muted {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
   /* --- Money tone ------------------------------------------------------ */
 
   .tk-income {

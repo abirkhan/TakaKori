@@ -234,20 +234,27 @@ export async function createCategoryAction(
  * way out of the UI. The columns have always been ordinary updatable columns, so
  * this was missing code rather than a missing capability.
  *
- * `openingBalance` is **required** here, where it is optional on the create. That is
- * deliberate: an edit that omitted it would write `'0.00'` over a real balance,
- * because a patch is not a merge. Requiring the field means the form has to carry the
- * figure it is editing, which is also the only way the user can see what they are
- * about to overwrite.
+ * **The opening balance is no longer edited here, and `updateAccount` was changed to
+ * match.** It used to be required, because a patch is not a merge: a form that
+ * omitted the field would write `'0.00'` over a real balance, which is precisely the
+ * bug this project already committed to its own database — an account showing
+ * ৳5,000.00 with `opening_balance` 0.00.
+ *
+ * That made the field mandatory, which meant the sheet *had* to show it. And here is
+ * what that did in practice: on an account with history, the field held `0.00` while
+ * the row above read ৳5,000.00. Pre-filling a starting point next to a computed
+ * balance is an invitation to correct the wrong number — the user sees a discrepancy
+ * and edits the figure that is not on screen.
+ *
+ * So the correction moves to `account_adjustments`, where it is a row with a reason
+ * rather than an overwrite, and this action no longer touches the column at all. The
+ * hazard above is fixed properly in `updateAccount`, which now omits the key entirely
+ * when the caller does not supply it, rather than being papered over by requiring it.
  */
 const updateAccountSchema = z.object({
   id: z.string().uuid('That account no longer exists'),
   name: z.string().trim().min(1, 'Name is required').max(80),
   kind: accountKindSchema,
-  openingBalance: z
-    .string()
-    .trim()
-    .regex(/^-?\d*\.?\d{0,2}$/, 'Enter a valid amount'),
 })
 
 export async function updateAccountAction(
@@ -258,7 +265,6 @@ export async function updateAccountAction(
     id: formData.get('id'),
     name: formData.get('name'),
     kind: formData.get('kind'),
-    openingBalance: formData.get('openingBalance'),
   })
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFrom(parsed.error) }
@@ -269,7 +275,6 @@ export async function updateAccountAction(
       id: parsed.data.id,
       name: parsed.data.name,
       kind: parsed.data.kind,
-      openingBalance: parsed.data.openingBalance,
     })
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'Could not save the account' }

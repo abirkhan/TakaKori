@@ -305,3 +305,31 @@ describe('the write map', () => {
     }
   })
 })
+
+describe('balance corrections', () => {
+  /**
+   * An adjustment is its own table, but the *cache* key lives under `accounts:`
+   * deliberately. `WRITES.account` already carries that prefix, so recording or removing
+   * a correction clears the balance and the correction list in one call. A separate
+   * `adjustments:` prefix would have meant editing both tables, and the failure mode of
+   * forgetting is ADR-012's: the balance moves and the ledger beside it still shows the
+   * old row, so two numbers on the same screen disagree with nothing to indicate which
+   * is stale.
+   */
+  it('nests corrections under the accounts prefix, so an account write clears both', () => {
+    expect(keys.adjustments('acc-1').startsWith(PREFIX.accounts)).toBe(true)
+    expect(WRITES.account).toContain(PREFIX.accounts)
+  })
+
+  it("keeps one account's corrections out of another account's cache entry", () => {
+    expect(keys.adjustments('acc-1')).not.toBe(keys.adjustments('acc-2'))
+  })
+
+  it('does not collide with the account list or the balances view', () => {
+    // All three are under `accounts:` and are genuinely different reads. A collision
+    // means whichever mounted last overwrites the other entry, and the user then sees
+    // one's answer to a different question entirely.
+    const keys3 = [keys.accounts(true), keys.balances(), keys.adjustments('acc-1')]
+    expect(new Set(keys3).size).toBe(3)
+  })
+})
