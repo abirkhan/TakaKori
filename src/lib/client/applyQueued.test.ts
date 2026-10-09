@@ -176,12 +176,19 @@ describe('applyQueuedWrite - transaction.create', () => {
     expect(calls.some((c) => c.op === 'insert')).toBe(false)
   })
 
-  it('treats a unique violation as convergence, not failure', async () => {
-    // The read said absent, the insert collided: a stale read, or two drains racing.
-    // Either way the row now exists, so this is success.
+  it('treats a unique violation on the primary key as convergence, not failure', async () => {
+    // The read said absent, the insert collided on _pkey: a stale read, or two drains
+    // racing. Either way this identical row now exists, so this is success.
+    //
+    // **The constraint is named here, and naming it is the fix.** This test used to
+    // assert convergence for a bare 23505 with no constraint, which is what the old
+    // implementation assumed, and which silently discarded a queued category whose
+    // name collided on categories_workspace_type_name_key. A 23505 is only convergence
+    // when the server says it is the same row.
+    const pkey = 'duplicate key value violates unique constraint "transactions_pkey"'
     const { client } = fakeClient({
       existing: { data: null },
-      insert: { data: null, error: { code: '23505' } },
+      insert: { data: null, error: { code: '23505', message: pkey } },
     })
 
     expect(await applyQueuedWrite(ctxFor(client), queued())).toEqual({ ok: true })
@@ -573,5 +580,95 @@ describe('every queueable kind', () => {
     const insert = calls.find((c) => c.op === 'insert')?.arg as Record<string, unknown>
     expect(insert.interval_count).toBe('0')
     expect(insert.ends_on).toBeNull()
+  })
+})
+
+/**
+ * Which `23505` counts as convergence.
+ *
+ * **This distinction is load-bearing and getting it wrong loses a user's entry without
+ * telling them.** `createRow` used to treat any unique violation as "already applied",
+ * which is right for `transactions` — where the client-generated uuid is the only unique
+ * index, so a collision can only mean this identical row is here — and catastrophically
+ * wrong for `categories`, which has `categories_workspace_type_name_key`.
+ *
+ * Queue a category whose name is already taken and the insert raises `23505` on that
+ * index. The old code read that as convergence, reported success, and removed the queued
+ * write. Nothing was created, nothing was reported, and the entry stopped existing —
+ * the exact failure ADR-043 exists to prevent, reached through the code written to
+ * prevent it.
+ *
+ * Found by the offline E2E suite: the duplicate-category test waited forty seconds for a
+ * parked row that could never appear, because the write had been silently discarded.
+ */
+describe('a unique violation on a non-primary index', () => {
+  const conflict = {
+    code: '23505',
+    message:
+      'duplicate key value violates unique constraint "categories_workspace_type_name_key"',
+  }
+
+  it('is reported, not treated as convergence', async () => {
+    const { client } = fakeClient({ existing: { data: null }, insert: { data: null, error: conflict } })
+    const result = await applyQueuedWrite(ctxFor(client), queued({
+      kind: 'category.create',
+      payload: { name: 'Food', type: 'expense' },
+    }))
+
+    expect(result.ok).toBe(false)
+    // Permanently: a name that is taken will still be taken on the next drain, so
+    // retrying burns a request per pass to learn nothing.
+    expect(result.ok === false && result.retryable).toBe(false)
+  })
+
+  it('names what is wrong, in words the user can act on', async () => {
+    const { client } = fakeClient({ existing: { data: null }, insert: { data: null, error: conflict } })
+    const result = await applyQueuedWrite(ctxFor(client), queued({
+      kind: 'category.create',
+      payload: { name: 'Food', type: 'expense' },
+    }))
+
+    // "Another entry already uses that name" tells the user to rename something. The
+    // constraint's own identifier would not, and a generic apology would not either.
+    expect(result.ok === false && result.error).toMatch(/name/)
+  })
+
+  it('is a permanent failure, so the write parks instead of retrying forever', async () => {
+    const { client } = fakeClient({ existing: { data: null }, insert: { data: null, error: conflict } })
+    const result = await applyQueuedWrite(ctxFor(client), queued({
+      kind: 'category.create',
+      payload: { name: 'Food', type: 'expense' },
+    }))
+    expect(result.ok === false && result.retryable).toBe(false)
+  })
+})
+
+describe('a unique violation on the primary key', () => {
+  it('is still convergence, because that is the same row landing twice', async () => {
+    const { client } = fakeClient({
+      existing: { data: null },
+      insert: {
+        data: null,
+        error: { code: '23505', message: 'duplicate key value violates unique constraint "transactions_pkey"' },
+      },
+    })
+
+    // The read above already asked by id and found nothing, so this means the read was
+    // served stale — the race ADR-042's read-before-replay exists to absorb.
+    const result = await applyQueuedWrite(ctxFor(client), queued())
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('is NOT convergence when the server does not say which constraint', async () => {
+    const { client } = fakeClient({
+      existing: { data: null },
+      insert: { data: null, error: { code: '23505', message: 'duplicate key' } },
+    })
+
+    // No evidence it is the primary key, so the safe reading is a conflict. Defaulting
+    // the other way would reintroduce the silent-loss bug for any server that phrases
+    // its message differently — which is every future PostgREST version, possibly.
+    const result = await applyQueuedWrite(ctxFor(client), queued())
+    expect(result.ok).toBe(false)
   })
 })

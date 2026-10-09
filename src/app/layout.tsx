@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { OfflineBanner } from '@/components/app/OfflineBanner'
+import { PendingWrites } from '@/components/app/PendingWrites'
 import { AppleStartupImages } from './AppleStartupImages'
 import './globals.css'
 
@@ -95,6 +96,13 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
             so it pushes the page down and covers nothing. */}
         <OfflineBanner />
         <AppleStartupImages />
+        {/*
+          Beside the banner rather than inside a screen, because the queue is global:
+          nine of the ten writes that can be waiting are not transactions, and a parked
+          row a user cannot see is a dead end however good its discard button is.
+          Returns null when nothing is queued, so it costs nothing otherwise.
+        */}
+        <PendingWrites />
         {children}
       </body>
     </html>

@@ -10,16 +10,22 @@ import { buttonClass } from '@/components/ui/button'
 /**
  * Writes that are on this device and not yet on the server.
  *
- * **Rendered above the transaction list, not inside it**, and that placement is the
- * decision. These rows are not transactions — they have no server id, they are not
- * in any total, and they are not filtered, sorted or paged like the rest. Putting
- * them in the list would imply they had been counted. Above it, they read as
- * "waiting", which is what they are.
+ * **Global, because the queue is.** This component used to render only on
+ * `/transactions`, above the transaction list. That was right for its own sake — these
+ * rows are not transactions, they have no server id, they are in no total, and putting
+ * them in the list would imply they had been counted — and wrong about where it lived.
+ * Nine of the ten queueable writes are not transactions: a category, a budget, a
+ * recurring rule, an account. A user who queued one on /categories and then found it
+ * had been rejected had to guess that the answer was on a different screen, and a
+ * parked row they could not *see* was still a dead end however good the discard button
+ * was. It renders in the root layout beside `OfflineBanner`, which is the other piece
+ * of global connectivity state, and returns null when the queue is empty so it costs
+ * nothing on a screen with nothing queued.
  *
  * **The wording is the point.** A queued write is *not* saved; it is saved on this
  * device until a connection drains it (ADR-043). A list entry that said "Saved" and
- * then vanished from the list after a drain would teach the user that the app loses
- * things, which is the belief this feature exists to remove.
+ * then vanished after a drain would teach the user that the app loses things, which is
+ * the belief this feature exists to remove.
  *
  * **A failure says the reason.** "Waiting to sync" on a row the server has already
  * rejected is a lie with a countdown on it. The `failure` string from the drain is
@@ -40,14 +46,15 @@ import { buttonClass } from '@/components/ui/button'
  */
 export function PendingWrites() {
   const writes = useQueuedWrites()
-  // Which parked row is being corrected, and to what. One row at a time, because the
-  // thing being edited is the queued payload and two open editors of one payload is
-  // never what anyone wants.
+  // Which parked row is being corrected. One at a time, because the thing being
+  // edited is the queued payload and two open editors of one payload is never what
+  // anyone wants.
   const [fixing, setFixing] = useState<{ id: string; value: string } | null>(null)
 
   if (writes.length === 0) return null
 
   return (
+    <div className="mx-auto w-full max-w-3xl px-5 pt-3">
     <section aria-label="Waiting to sync" className="tk-card divide-hairline divide-y">
       {writes.map((write) => {
         const parked = parkedWrites([write]).length === 1
@@ -163,5 +170,6 @@ export function PendingWrites() {
         )
       })}
     </section>
+    </div>
   )
 }

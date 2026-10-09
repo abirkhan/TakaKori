@@ -83,6 +83,54 @@ function isUniqueViolation(error: unknown): boolean {
   )
 }
 
+/**
+ * The constraint a unique violation was raised on, if the server named it.
+ *
+ * PostgREST puts it in the message: `duplicate key value violates unique constraint
+ * "categories_workspace_type_name_key"`. Read out rather than guessed at, because the
+ * distinction is the whole point and a regex against a message format is fragile
+ * enough that failing to match must mean "do not treat it as convergence".
+ */
+function violatedConstraint(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null
+  const message = (error as { message?: string }).message
+  if (typeof message !== 'string') return null
+  const match = message.match(/unique constraint "([^"]+)"/)
+  return match ? match[1] : null
+}
+
+/**
+ * Is this violation the *same row* rather than a different one?
+ *
+ * **This distinction is load-bearing and getting it wrong loses a user's entry without
+ * telling them.** A `23505` means "a unique index rejected this insert", and for most of
+ * these tables that is *not* convergence — it is a genuine conflict the user has to
+ * resolve.
+ *
+ * `categories` has `categories_workspace_type_name_key`. Queue a category whose name is
+ * already taken, and the insert raises `23505` on *that* index. Treating it as
+ * convergence reported success, removed the queued write, and told the user their
+ * category was created. It was not. Nothing was created, nothing was reported, and the
+ * entry simply stopped existing — which is the exact failure ADR-043 exists to prevent,
+ * reached through the code that was supposed to prevent it.
+ *
+ * So convergence is only claimed when the violation is on the table's **primary key**,
+ * because that is the one index whose collision means "this identical row is already
+ * here". The read above has already asked by id; a primary-key collision after that
+ * means the read was served stale, which is the race the check exists for.
+ *
+ * A violation on any other index is reported, with the reason, and the write is parked
+ * for the user to fix — which is what the discard-and-correct path is for.
+ */
+function isSameRowViolation(error: unknown): boolean {
+  if (!isUniqueViolation(error)) return false
+  const constraint = violatedConstraint(error)
+  // No constraint named, so no evidence it is the primary key. Defaulting to
+  // "converged" here would reintroduce the silent-loss bug for every server that
+  // phrases its message differently.
+  return constraint !== null && constraint.endsWith('_pkey')
+}
+
 export interface ApplyContext {
   supabase: WriteClient
   /**
@@ -371,13 +419,31 @@ async function createRow(
   if (!inserted.error) return { ok: true }
 
   /**
-   * Lost a race, or the read was served from a stale read replica while a previous
-   * drain had in fact inserted. Either way the row we wanted now exists, so this is
-   * convergence and not a failure. Restricted to `23505` rather than swallowing
-   * every error: a shape-CHECK violation means the payload is wrong and must be
-   * reported, not retried into a permanent failure that hides a real bug.
+   * Convergence, but **only** for a primary-key collision — see `isSameRowViolation`,
+   * which explains why a `23505` on `categories_workspace_type_name_key` is a user's
+   * duplicate category and not this write landing twice.
+   *
+   * Restricted to that case rather than swallowing every error: a shape-CHECK violation
+   * means the payload is wrong and must be reported, not retried into a permanent
+   * failure that hides a real bug.
    */
-  if (isUniqueViolation(inserted.error)) return { ok: true }
+  if (isSameRowViolation(inserted.error)) return { ok: true }
+
+  /**
+   * A unique index other than the primary key. The queued write is parked with the
+   * constraint's own name, because that is the only thing that can help the user: the
+   * word "name" tells them to rename something, where a generic apology tells them
+   * nothing and a wrong-sounding success tells them a category exists that does not.
+   */
+  if (isUniqueViolation(inserted.error)) {
+    const constraint = violatedConstraint(inserted.error)
+    const subject = constraint?.includes('name') ? 'name' : 'value'
+    return {
+      ok: false,
+      error: `Another entry already uses that ${subject}.`,
+      retryable: false,
+    }
+  }
 
   return {
     ok: false,

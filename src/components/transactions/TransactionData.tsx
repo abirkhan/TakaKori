@@ -12,7 +12,6 @@ import { keys } from '@/lib/client/invalidations'
 import { TransactionFilters } from '@/components/transactions/TransactionFilters'
 import { TransactionSheetHost } from '@/components/transactions/TransactionSheetHost'
 import { TransactionList, type TransactionRowView } from '@/components/transactions/TransactionList'
-import { PendingWrites } from '@/components/transactions/PendingWrites'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Icon } from '@/components/ui/Icon'
@@ -175,11 +174,13 @@ function TransactionsBody() {
         ) : null}
       </Suspense>
 
-      {/* Writes held on this device, above the list and outside it. They are not
+      {/* Writes held on this device used to render here, above the list. They are not
           transactions — no server id, not in any total, not filtered or paged — so
-          rendering them as rows would imply they had been counted. See
-          `PendingWrites`. */}
-      <PendingWrites />
+          rendering them as rows would imply they had been counted, which is still why
+          they sit outside the list. But they are now in the root layout, because nine of
+          the ten queueable writes are not transactions and a parked row on /categories
+          had to be invisible until the user happened to open this screen. See
+          `components/app/PendingWrites`. */}
 
       {/* The list owns the screen. Adding a transaction used to be a six-field form
           occupying the entire first screenful of the screen the user opened to
