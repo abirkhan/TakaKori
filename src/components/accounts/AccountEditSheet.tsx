@@ -13,6 +13,7 @@ import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteToast } from '@/lib/client/useWriteToast'
 import { keys } from '@/lib/client/invalidations'
 import { listAdjustments } from '@/lib/queries/client'
 import { useQuery } from '@/lib/client/useQuery'
@@ -97,6 +98,13 @@ export function AccountEditSheet({
 
   useWriteInvalidation(update.success, 'account', updateAttempt)
   useWriteInvalidation(remove.success, 'account', removeAttempt)
+
+  /**
+   * Every write in this sheet closes it, so the toast is the only thing left standing.
+   * Renaming an account or archiving it used to give no confirmation at all.
+   */
+  useWriteToast(update, updateAttempt, 'Account updated.')
+  useWriteToast(remove, removeAttempt, 'Account removed.')
   useWriteInvalidation(adjust.success, 'account', adjustAttempt)
 
   // Both close on success, so a rejection leaves the sheet open with the reason

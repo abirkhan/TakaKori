@@ -372,3 +372,89 @@ base.describe('edit sheets', () => {
     }
   })
 })
+
+/**
+ * Every write says so.
+ *
+ * Four surfaces raised no confirmation at all: `CategoryForm`, `CategoryEditSheet`,
+ * `AccountForm`, `AccountEditSheet`. Budgets and recurring were fine because they go
+ * through `WriteForm`, and the two transaction sheets and `ConfirmDeleteSheet` each had
+ * their own — so the pattern was never in one place, and nobody noticed the four that
+ * were missing it. Adding or removing a category simply made the list change.
+ *
+ * Asserted here rather than in a unit test because the failure was never a wrong value:
+ * it was an element that was not in the DOM at all, which is the one thing a green gate
+ * and a passing component test both cannot see.
+ */
+base.describe('write confirmations', () => {
+  base.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  authedTest('adding a category says so', async ({ signedIn }) => {
+    const name = `E2E toast ${Date.now()}`
+    await signedIn.goto('/categories')
+
+    const form = signedIn.locator('form').filter({ hasText: 'Add category' })
+    await form.locator('[name="name"]').fill(name)
+    await form.getByRole('button', { name: 'Add' }).click()
+
+    await expect(signedIn.getByText('Category added.')).toBeVisible({ timeout: 15_000 })
+
+    // Clean up through the app, since the point of this test is the path.
+    const row = signedIn.locator('li').filter({ hasText: name }).first()
+    await row.getByRole('button', { name: /^Edit/ }).click()
+    const sheet = signedIn.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await sheet.getByRole('button', { name: 'Remove category' }).click()
+    await expect(signedIn.getByText('Category removed.')).toBeVisible({ timeout: 15_000 })
+  })
+
+  authedTest('adding two categories says so twice', async ({ signedIn }) => {
+    /**
+     * The guard, not the toast.
+     *
+     * `useWriteToast` keys on `(attempt, success)`. Keying on the message alone — which
+     * is what `useWriteInvalidation` used to do, and what this hook was written to stop
+     * repeating — fires once and then goes silent, so the *second* identical write in a
+     * session reports nothing. That is a bug you only see by doing the same thing twice.
+     */
+    await signedIn.goto('/categories')
+    const form = signedIn.locator('form').filter({ hasText: 'Add category' })
+
+    for (const n of [1, 2]) {
+      const name = `E2E twice ${n} ${Date.now()}`
+      await form.locator('[name="name"]').fill(name)
+      await form.getByRole('button', { name: 'Add' }).click()
+      await expect(signedIn.getByText('Category added.')).toBeVisible({ timeout: 15_000 })
+
+      const row = signedIn.locator('li').filter({ hasText: name }).first()
+      await row.getByRole('button', { name: /^Edit/ }).click()
+      const sheet = signedIn.getByRole('dialog')
+      await expect(sheet).toBeVisible()
+      await sheet.getByRole('button', { name: 'Remove category' }).click()
+      await expect(signedIn.getByText('Category removed.')).toBeVisible({ timeout: 15_000 })
+    }
+  })
+
+  authedTest('adding an account says so', async ({ signedIn }) => {
+    const name = `E2E toast acct ${Date.now()}`
+    await signedIn.goto('/accounts')
+    await signedIn.getByRole('link', { name: 'Add account' }).click()
+
+    const sheet = signedIn.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await sheet.locator('[name="name"]').fill(name)
+    await sheet.getByRole('button', { name: /Save|Add/ }).click()
+
+    await expect(signedIn.getByText('Account added.')).toBeVisible({ timeout: 15_000 })
+
+    // Leave no stray account behind.
+    const row = signedIn.locator('li').filter({ hasText: name }).first()
+    if ((await row.count()) > 0) {
+      await row.getByRole('button', { name: /^Edit/ }).click()
+      const edit = signedIn.getByRole('dialog')
+      await expect(edit).toBeVisible()
+      await edit.getByRole('button', { name: 'Remove account' }).click()
+      await expect(signedIn.getByText('Account removed.')).toBeVisible({ timeout: 15_000 })
+    }
+  })
+})

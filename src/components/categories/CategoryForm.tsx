@@ -8,6 +8,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteToast } from '@/lib/client/useWriteToast'
 
 export function CategoryForm() {
   const [state, formAction, pending, attempt] = useWriteAction<ActionState>(
@@ -17,6 +18,9 @@ export function CategoryForm() {
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
   useWriteInvalidation(state.success, 'category', attempt)
+  // The row appearing is the confirmation on this screen, but a toast says it happened
+  // rather than leaving the user to work out whether the list had simply re-rendered.
+  useWriteToast(state, attempt, 'Category added.')
   const [type, setType] = useState<'expense' | 'income'>('expense')
 
   return (

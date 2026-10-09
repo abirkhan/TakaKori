@@ -9,6 +9,7 @@ import { Alert } from '@/components/ui/Alert'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteToast } from '@/lib/client/useWriteToast'
 
 const KINDS = [
   { value: 'cash', label: 'Cash' },
@@ -87,6 +88,7 @@ export function AccountForm() {
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
   useWriteInvalidation(state.success, 'account', attempt)
+  useWriteToast(state, attempt, 'Account added.')
   const { open, close } = useUrlSheet('account')
   const formId = useId()
 

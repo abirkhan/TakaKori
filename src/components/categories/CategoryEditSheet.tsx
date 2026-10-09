@@ -9,6 +9,7 @@ import { TextField } from '@/components/ui/Field'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { buttonClass } from '@/components/ui/button'
 import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteToast } from '@/lib/client/useWriteToast'
 import type { Category } from '@/lib/queries/reference'
 import type { CategoryType } from '@/types/database'
 
@@ -57,6 +58,15 @@ export function CategoryEditSheet({
 
   useWriteInvalidation(update.success, 'category', updateAttempt)
   useWriteInvalidation(remove.success, 'category', removeAttempt)
+
+  /**
+   * Both writes close this sheet on success, and a toast is the only thing left on
+   * screen afterwards. Without it, renaming or removing a category gave no
+   * confirmation at all — the sheet closed and the list looked the same, or shorter,
+   * with nothing having said which happened.
+   */
+  useWriteToast(update, updateAttempt, 'Category renamed.')
+  useWriteToast(remove, removeAttempt, 'Category removed.')
 
   useEffect(() => {
     if (update.success && open) onClose()
