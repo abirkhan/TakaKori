@@ -339,12 +339,25 @@ base.describe('edit sheets', () => {
     await expect(sheet).toBeHidden({ timeout: 20_000 })
   })
 
-  authedTest('an account can be archived from its sheet', async ({ signedIn }) => {
+authedTest('an account can be archived and restored from its sheet', async ({ signedIn }) => {
     // Same shape, same class of bug. The account sheet had the sibling form but still
     // pointed at it with `form=`, which is the submit React complains about.
     await signedIn.goto('/accounts')
-    const first = signedIn.locator('[aria-label^="Edit "]').first()
-    const label = (await first.getAttribute('aria-label')) ?? ''
+    // A row that is *not* already archived. This test archives the account it picks, so
+    // picking the first row blindly left one archived behind whenever an earlier run
+    // had done the same — and the next run then opened an archived sheet looking for
+    // an "Archive instead" that is not there, which reads as a bug in the feature.
+    const rows = signedIn.locator('li').filter({ has: signedIn.locator('[aria-label^="Edit "]') })
+    let first = rows.first()
+    let label = (await first.getAttribute('aria-label')) ?? ''
+    for (let i = 0; i < (await rows.count()); i++) {
+      const row = rows.nth(i)
+      if ((await row.getByText('archived').count()) === 0) {
+        first = row.locator('[aria-label^="Edit "]')
+        label = (await first.getAttribute('aria-label')) ?? ''
+        break
+      }
+    }
     const name = label.replace(/^Edit /, '')
 
     await first.click()
@@ -353,23 +366,41 @@ base.describe('edit sheets', () => {
     await sheet.getByRole('button', { name: 'Archive instead' }).click()
 
     await expect(sheet).toBeHidden({ timeout: 20_000 })
-    // Archived, not deleted: the row is still there and now says so.
     // Archived, not deleted: the row is still there and now says so. Scoped to this
     // row, because an earlier run may have left another account archived and a
     // page-wide `getByText('archived')` matches both.
     const archivedRow = signedIn.locator('li').filter({ hasText: name }).first()
     await expect(archivedRow.getByText('archived')).toBeVisible({ timeout: 20_000 })
 
-    // Put it back, through the app, so the account does not stay archived for the rest
-    // of the run.
-    const row = signedIn.locator('li').filter({ hasText: name }).first()
-    if ((await row.count()) > 0) {
-      await row.getByRole('button', { name: /^Edit/ }).click()
-      const again = signedIn.getByRole('dialog')
-      await expect(again).toBeVisible()
-      const unarchive = again.getByRole('button', { name: /Archive/ })
-      if ((await unarchive.count()) > 0) await unarchive.click()
-    }
+    /**
+     * And back again, which is the point of the feature.
+     *
+     * Archiving used to be a one-way door: the sheet offered "Archive instead" and
+     * nothing else, so an account archived by mistake was gone until someone cleared
+     * the data. This is the exit, and the second half of the round trip is what proves
+     * it is one - an archive test that stops at "it archived" passes just as happily
+     * against the broken version that cannot be undone.
+     */
+    await archivedRow.getByRole('button', { name: /^Edit/ }).click()
+    const restored = signedIn.getByRole('dialog')
+    await expect(restored).toBeVisible()
+
+    // While archived the sheet is closed: the name, the type and the correction cannot
+    // be edited, and Save is not offered as though it could.
+    await expect(restored.locator('[name="name"]')).toBeDisabled()
+    await expect(restored.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    await expect(restored.getByRole('button', { name: 'Record correction' })).toBeDisabled()
+    // Archiving again is not offered, because it is already archived.
+    await expect(restored.getByRole('button', { name: 'Archive instead' })).toHaveCount(0)
+
+    // The way out is the primary action, since that is what someone opening an archived
+    // account almost always wants.
+    await restored.getByRole('button', { name: 'Restore account' }).click()
+    await expect(restored).toBeHidden({ timeout: 20_000 })
+
+    // Back in the live list, no longer marked archived.
+    const live = signedIn.locator('li').filter({ hasText: name }).first()
+    await expect(live.getByText('archived')).toHaveCount(0, { timeout: 20_000 })
   })
 })
 
