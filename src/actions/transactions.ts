@@ -37,6 +37,17 @@ export interface ActionState {
   error?: string
   success?: string
   fieldErrors?: Record<string, string>
+  /**
+   * The id of a row the action created.
+   *
+   * Exists so a caller can key a *remount* on it, which is how a form clears itself
+   * after a successful write. The obvious alternative — `setState` in an effect watching
+   * `success` — cascades an extra render on every post, and re-mounting on the success
+   * *message* does not work either, because the message is the same string each time and
+   * so the key never changes. An id is unique per post, so the key changes exactly when
+   * a write actually landed and not otherwise.
+   */
+  createdId?: string
 }
 
 /**
@@ -396,10 +407,19 @@ export async function deleteCategoryAction(
  */
 const adjustmentSchema = z.object({
   accountId: z.string().uuid('That account no longer exists'),
+  /**
+   * The message says what is wrong, not merely that something is.
+   *
+   * It read "Enter an amount, optionally negative", which is what a user who typed
+   * nothing sees — and it is also what a user who typed `1.005` sees, having done
+   * exactly what the field asked. `1.005` is an amount; it is the *third decimal place*
+   * that cannot be stored in `numeric(14,2)`, and the message has to name that, or the
+   * user has no way to guess what to remove.
+   */
   amount: z
     .string()
     .trim()
-    .regex(/^-?\d+(\.\d{1,2})?$/, 'Enter an amount, optionally negative'),
+    .regex(/^-?\d+(\.\d{1,2})?$/, 'Enter an amount like 500 or -500, with up to 2 decimal places'),
   reason: z.string().trim().max(200).optional(),
 })
 
@@ -421,21 +441,26 @@ export async function createAdjustmentAction(
     return { error: 'That would not change the balance.' }
   }
 
-  try {
-    await createAdjustment({
-      accountId: parsed.data.accountId,
-      amount: parsed.data.amount,
-      reason: parsed.data.reason,
-    })
-  } catch (error) {
-    return {
-      error: error instanceof Error ? error.message : 'Could not record the correction',
-    }
+  // Outside the try: a write that landed must not be reported as a failure because
+// cache invalidation threw. Both `revalidatePath` calls follow the same rule.
+let createdId: string | undefined
+try {
+  const row = await createAdjustment({
+    accountId: parsed.data.accountId,
+    amount: parsed.data.amount,
+    reason: parsed.data.reason,
+  })
+  createdId = row?.id
+} catch (error) {
+  return {
+    error: error instanceof Error ? error.message : 'Could not record the correction',
   }
+}
 
-  revalidatePath('/dashboard')
-  revalidatePath('/accounts')
-  return { success: 'Correction recorded' }
+revalidatePath('/dashboard')
+revalidatePath('/accounts')
+// The id comes back so the caller can key a remount on it — see `createdId`.
+return { success: 'Correction recorded', createdId }
 }
 
 export async function deleteAdjustmentAction(

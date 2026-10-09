@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import {
+  createAdjustmentAction,
   deleteAccountAction,
   updateAccountAction,
   type ActionState,
@@ -80,6 +81,10 @@ export function AccountEditSheet({
     { queueKind: 'account.update' },
   )
   const [remove, removeForm, removePending] = useWriteAction<ActionState>(deleteAccountAction, {})
+  const [adjust, adjustForm, adjustPending] = useWriteAction<ActionState>(
+    createAdjustmentAction,
+    {},
+  )
 
   const [draft, setDraft] = useState(() => ({
     name: account.name,
@@ -93,6 +98,7 @@ export function AccountEditSheet({
 
   useWriteInvalidation(update.success, 'account')
   useWriteInvalidation(remove.success, 'account')
+  useWriteInvalidation(adjust.success, 'account')
 
   // Both close on success, so a rejection leaves the sheet open with the reason
   // beside the field that caused it.
@@ -166,24 +172,54 @@ export function AccountEditSheet({
       </div>
 
       {/*
+        Success goes to a toast, not to an inline Alert in this sheet.
+
+        The correction form below is keyed on the id the action returned, so it remounts
+        with an empty draft after a successful post — the reset that stops a posted
+        figure sitting in the box where the next tap writes it twice. A remount destroys
+        everything in that subtree, so an Alert inside it is destroyed on success too:
+        the user records a correction and is told nothing. And a confirmation that
+        appears and is immediately unmounted is worse than none at all, because a
+        silent success and a lost write look identical.
+
+        The toast is the app's answer to this everywhere else (`WriteForm`,
+        `EditTransactionSheet`, `ConfirmDeleteSheet`), and it is the right one here for a
+        second reason: the sheet has no `role="alert"`, so an Alert appearing above the
+        fold of a scrolled modal body is not announced at all. The toast layer is a
+        persistent `aria-live="polite"` region, so it is — to everyone, including a
+        screen reader, and including when the sheet is scrolled.
+      */}
+      {/*
         The correction is its own form with its own submit, not a field on the form
         above. Two reasons: the two actions mean different things and one Save button
         cannot honestly mean both; and posting a correction should not also write the
         name field, so a user who typed a new name and then corrected the balance does
         not lose the name to a surprising overwrite.
 
-        It is also a separate component, and that is the reset. Recording a correction
-        has to clear the amount field — leaving a posted figure in the box invites the
-        user to submit it again — but doing that from an effect means setState in an
-        effect, which cascades a render on every successful post. Keying the component
-        on the count of recorded corrections gives the same reset for free: each post
-        makes the count grow, so React mounts a fresh instance with an empty draft. No
-        effect, no extra state, and the field clears on the render the post caused.
+        It is separate, and keyed on the returned id, because remounting is how the draft
+        clears — the codebase's preferred reset over a setState-in-effect, which cascades
+        a render on every post.
+
+        **Keyed on the returned id, not on the number of recorded corrections.** The
+        count was the first attempt and it is wrong in three ways. It is `0` while the
+        read is in flight, so opening an account that already has corrections mounted
+        this subtree twice and could discard a draft typed in that window. It is `0`
+        again for the moment the post invalidates the cache, which is the only reason
+        the reset worked at all — if that refetch failed, the key never changed, the
+        posted amount stayed in the box, and the user's next tap wrote it twice. And the
+        success string does not work either: it is the same words every time, so the key
+        would not change. An id is unique per write, so it moves exactly when a write
+        landed.
       */}
       <AccountCorrectionForm
-        key={adjustments.data?.length ?? 0}
+        key={adjust.createdId ?? 'empty'}
         account={account}
         recorded={adjustments.data ?? []}
+        form={adjustForm}
+        pending={adjustPending}
+        error={adjust.error}
+        fieldErrors={adjust.fieldErrors}
+        createdId={adjust.createdId}
       />
 
       {/*

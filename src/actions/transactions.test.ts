@@ -129,6 +129,35 @@ describe('createAdjustmentAction', () => {
     expect(state.success).toBeUndefined()
     expect(state.error).toMatch(/not in this workspace/)
   })
+
+  /**
+   * The sheet keys its correction form on this id, and the key is the reset: a post
+   * that returns nothing would leave the posted amount sitting in the field, where the
+   * next tap writes it again.
+   */
+  it('returns the created id, so the caller can key a remount on it', async () => {
+    vi.mocked(server.createAdjustment).mockResolvedValueOnce({ id: 'adj-9' } as never)
+    const state = await createAdjustmentAction({}, form(valid))
+    expect(state.createdId).toBe('adj-9')
+  })
+
+  it('returns no id on failure, so a rejected post cannot clear the draft', async () => {
+    vi.mocked(server.createAdjustment).mockRejectedValueOnce(new Error('nope'))
+    const state = await createAdjustmentAction({}, form(valid))
+    expect(state.createdId).toBeUndefined()
+  })
+
+  it('returns a distinct id per post, since the success message does not vary', async () => {
+    vi.mocked(server.createAdjustment).mockResolvedValueOnce({ id: 'adj-1' } as never)
+    vi.mocked(server.createAdjustment).mockResolvedValueOnce({ id: 'adj-2' } as never)
+    const first = await createAdjustmentAction({}, form(valid))
+    const second = await createAdjustmentAction({}, form(valid))
+    // Both say "Correction recorded". Keying a remount on `success` would therefore
+    // never change the key, and the field would keep the posted figure after the
+    // second correction — the exact failure the id exists to prevent.
+    expect(first.success).toBe(second.success)
+    expect(first.createdId).not.toBe(second.createdId)
+  })
 })
 
 describe('updateAccountAction', () => {

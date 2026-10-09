@@ -75,16 +75,36 @@ base.describe('sheets', () => {
     await expect(tab).not.toBeFocused()
   })
 
-  authedTest('a closed sheet leaves nothing painted', async ({ signedIn }) => {
+  authedTest('a closed sheet leaves nothing in the DOM at all', async ({ signedIn }) => {
     await signedIn.goto('/transactions')
+    await signedIn.locator('nav[aria-label="Primary"]').waitFor()
 
-    // The add sheet is mounted on every render of this page, closed. If anything in
-    // the primitive sets `display` unconditionally it defeats the UA's
-    // `dialog:not([open]) { display: none }`, and a closed sheet silently becomes a
-    // permanent invisible-but-present overlay that still swallows clicks and still
-    // holds focus. Nothing may be visible before the sheet is opened.
+    // **This used to assert the opposite**, and the opposite was the bug.
+    //
+    // `Modal` returned `null` on the server — there is no `document` there — but
+    // rendered its portal on the client whether or not it was open. So a closed sheet
+    // existed in the client's DOM and not in the server's, and React could not hydrate
+    // the tree. That was error #418, on every authed screen, on every load, because the
+    // app bar's "More" dialog is mounted closed everywhere. `Modal` now renders nothing
+    // until it is open, so the mismatch is gone.
+    //
+    // The original reason for this test still holds and is still asserted below: if
+    // anything in the primitive sets `display` unconditionally it defeats the UA's
+    // `dialog:not([open]) { display: none }`, and a sheet becomes an
+    // invisible-but-present overlay that still swallows clicks. There is now a shorter
+    // window for that — between the dialog mounting and `showModal()` — and it is real,
+    // so the second assertion below covers it.
+    await expect(signedIn.locator('.tk-modal')).toHaveCount(0)
+
+    // Open it, so the check above is not satisfied merely by a sheet that failed to
+    // render at all.
+    await fab(signedIn).click()
     await expect(signedIn.locator('.tk-modal')).toHaveCount(1)
-    await expect(signedIn.locator('.tk-modal')).toBeHidden()
+    await expect(signedIn.locator('.tk-modal')).toBeVisible()
+
+    // And closing it removes it rather than leaving an invisible overlay behind.
+    await signedIn.keyboard.press('Escape')
+    await expect(signedIn.locator('.tk-modal')).toHaveCount(0)
   })
 
   authedTest('a short sheet is anchored to the bottom edge, not the top', async ({ signedIn }) => {

@@ -75,52 +75,69 @@ export function AccountBalanceBreakdown({ account }: { account: Account }) {
   const fromTransactions: Minor = total - opening - corrections
 
   return (
-    <div className="tk-card-flat flex flex-col gap-2">
-      <Line
-        label="Balance today"
-        value={formatMinor(total, { currency })}
-        emphasis
-        hint="What this account holds now, including everything below."
-      />
-      <Line label="Opening balance" value={formatMinor(opening, { currency })} hint="What it started at." />
-      <Line
-        label="From transactions"
-        value={formatMinor(fromTransactions, { currency })}
-        hint="Income, spending and transfers in and out, all time."
-      />
-      {corrections !== 0 && (
+    <div className="tk-card-flat flex flex-col gap-3">
+      {/*
+        The balance gets its own line, above the parts, rather than sharing a row with
+        one of them.
+
+        `.tk-money` is 2rem, which is a hero size, and a hero figure beside a 13px label
+        in a `justify-between` row runs out of width at 320px: the sheet is 280px of
+        content there, and `.tk-money` has no `white-space: nowrap`, so the figure wraps
+        mid-number instead of overflowing — a total split across two lines, which reads
+        as two numbers. Stacked, the figure has the full width and the parts below are
+        small enough to share rows comfortably.
+      */}
+      <div className="flex flex-col" data-breakdown="total">
+        <span className="tk-caption">
+          Balance today
+          {/* Read out for the same reason the parts are: it is the figure the other
+              three lines add up to, which is not something a glance can work out. */}
+          <span className="sr-only">. What this account holds now, including everything below.</span>
+        </span>
+        <span className="tk-money">{formatMinor(total, { currency })}</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Line
-          label="Corrections"
-          value={formatMinor(corrections, { currency })}
-          hint="Recorded adjustments. Neither income nor spending."
+          label="Opening balance"
+          value={formatMinor(opening, { currency })}
+          hint="What it started at."
         />
-      )}
+        <Line
+          label="From transactions"
+          value={formatMinor(fromTransactions, { currency })}
+          hint="Income, spending and transfers in and out, all time."
+        />
+        {corrections !== 0 && (
+          <Line
+            label="Corrections"
+            value={formatMinor(corrections, { currency })}
+            hint="Recorded adjustments. Neither income nor spending."
+          />
+        )}
+      </div>
     </div>
   )
 }
 
-function Line({
-  label,
-  value,
-  hint,
-  emphasis = false,
-}: {
-  label: string
-  value: string
-  hint?: string
-  emphasis?: boolean
-}) {
+function Line({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className={emphasis ? 'tk-label' : 'tk-caption'}>
+    /**
+     * `data-breakdown` names the line so a test can find it by identity rather than by
+     * its formatted text. Reading the number back out of `৳ 2,536.00` means stripping a
+     * locale symbol and South Asian grouping before it can be compared — which is how
+     * a formatting change becomes a spurious balance failure, and how a balance failure
+     * hides behind a formatting change. The same convention as `[data-row-title]`.
+     */
+    <div className="flex items-baseline justify-between gap-3" data-breakdown={label}>
+      <span className="tk-caption min-w-0">
         {label}
         {hint && <span className="sr-only">. {hint}</span>}
       </span>
-      {/* `tk-money` and `tk-amount` are tabular, so the figures align on the decimal
-          and the column reads at a glance. `tk-amount-muted` rather than a colour
-          class: these are supporting lines under a figure, and there is a role for
-          that. */}
-      <span className={emphasis ? 'tk-money' : 'tk-amount-muted'}>{value}</span>
+      {/* `tk-amount-muted` is tabular with `nowrap`, so the figures align on the decimal
+          and the column reads at a glance. A nowrap figure on the right of a `min-w-0`
+          label is what keeps a long taka amount from pushing the row wide. */}
+      <span className="tk-amount-muted">{value}</span>
     </div>
   )
 }

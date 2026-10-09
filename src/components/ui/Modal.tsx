@@ -104,7 +104,26 @@ export function Modal({
   // Portalled to the end of `body` so the sheet is never clipped by an ancestor
   // with `overflow: hidden` or a stacking context, both of which exist on this
   // app's screens.
-  if (typeof document === 'undefined') return null
+  //
+  // **Nothing is rendered while closed, on either side.** This used to guard only the
+  // server (`typeof document === 'undefined'`), so a closed sheet was absent from the
+  // server HTML and present in the client's — a portal whose server markup did not exist.
+  // React cannot hydrate that, and reported it as a full-tree mismatch: the "More"
+  // dialog in the app bar is mounted closed on every authed screen, so this fired on
+  // every screen, on every load. That is React error #418, which had been reproduced
+  // here for some time without a cause. The mismatch was never about stale data or the
+  // service worker; it was a `<dialog>` in the DOM that should not have been in it.
+  //
+  // It was also why `e2e/sheets.spec.ts` passed throughout. The suite asserts that a
+  // closed sheet is *not painted*, and `dialog:not([open])` is `display: none`, so the
+  // element was correctly invisible while still being present. A visual assertion
+  // cannot see a node that is hidden.
+  //
+  // The trade is that a close is now an unmount rather than a `close()` call, so a
+  // sheet with an exit animation would lose it. `Modal` has no exit animation — the
+  // one it replaced had none either — and a correct first paint is worth more than a
+  // transition.
+  if (typeof document === 'undefined' || !open) return null
 
   return createPortal(
     <dialog
