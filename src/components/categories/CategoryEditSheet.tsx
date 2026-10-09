@@ -54,7 +54,6 @@ export function CategoryEditSheet({
   const [draft, setDraft] = useState({ name: category.name, type: category.type })
 
   const formId = useId()
-  const removeFormId = useId()
 
   useWriteInvalidation(update.success, 'category', updateAttempt)
   useWriteInvalidation(remove.success, 'category', removeAttempt)
@@ -110,27 +109,42 @@ export function CategoryEditSheet({
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
           error={update.fieldErrors?.name}
         />
+      </form>
 
-        <div className="tk-card-flat mt-1 flex flex-col gap-3">
-          <form id={removeFormId} action={removeForm} className="contents">
-            <input type="hidden" name="id" value={category.id} />
-          </form>
+      {/*
+        The remove section is a **sibling** form, not a nested one.
 
-          {remove.error && <Alert tone="error">{remove.error}</Alert>}
+        It used to sit inside the form above, with the button pointing at it through the
+        HTML `form` attribute. HTML does not allow a form inside a form: the parser drops
+        the inner `<form>` start tag entirely, so `form={removeFormId}` referred to a
+        form that was never created, the button submitted nothing, and **removing a
+        category silently did nothing** — no error, no row, no change.
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              form={removeFormId}
-              disabled={removePending}
-              className={buttonClass('quiet', { size: 'sm' })}
-            >
-              Remove category
-            </button>
-            <span className="tk-caption">
-              Transactions keep their amounts and show as &ldquo;Uncategorised&rdquo;.
-            </span>
-          </div>
+        The nesting was invisible to the gate because no test removed a category, and to
+        the browser because it "worked" everywhere the sibling pattern was used. Two
+        console errors and one runtime error were the only evidence, from the Next dev
+        overlay, on a screen a user had to reach deliberately.
+
+        Putting the button inside its own form also removes the `form=` attribute, which
+        is what React complains about: a submit it did not initiate is
+        "A React form was unexpectedly submitted", and the form's `action` never runs.
+      */}
+      <form action={removeForm} className="tk-card-flat mt-4 flex flex-col gap-3">
+        <input type="hidden" name="id" value={category.id} />
+
+        {remove.error && <Alert tone="error">{remove.error}</Alert>}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="submit"
+            disabled={removePending}
+            className={buttonClass('quiet', { size: 'sm' })}
+          >
+            Remove category
+          </button>
+          <span className="tk-caption">
+            Transactions keep their amounts and show as &ldquo;Uncategorised&rdquo;.
+          </span>
         </div>
       </form>
     </Modal>

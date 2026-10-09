@@ -92,7 +92,6 @@ export function AccountEditSheet({
   }))
 
   const formId = useId()
-  const removeFormId = useId()
 
   const adjustments = useQuery(keys.adjustments(account.id), () => listAdjustments(account.id))
 
@@ -230,17 +229,28 @@ export function AccountEditSheet({
         foreign-key error, so pressing Remove on an account with history tells them
         that instead of failing obscurely.
       */}
-      <div className="tk-card-flat mt-5 flex flex-col gap-3">
-        <form id={removeFormId} action={removeForm} className="contents">
-          <input type="hidden" name="id" value={account.id} />
-        </form>
+      {/*
+        A sibling form with the buttons **inside** it, rather than a separate form
+        referenced with the HTML `form` attribute.
+
+        Both forms here are React Server Action forms, and a submit React did not initiate
+        raises "A React form was unexpectedly submitted" — the `action` never runs. It
+        was silent in the account sheet only because the nesting bug in `CategoryEditSheet`
+        was the loud one; this is the same latent shape, one layer along.
+
+        Both buttons live in one form deliberately. "Archive instead" and "Remove account"
+        are two answers to one question, and both submit the same id — differing only in
+        the `name`/`value` pair the action reads — so they are one form with two submit
+        buttons rather than two forms.
+      */}
+      <form action={removeForm} className="tk-card-flat mt-5 flex flex-col gap-3">
+        <input type="hidden" name="id" value={account.id} />
 
         {remove.error && <Alert tone="error">{remove.error}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="submit"
-            form={removeFormId}
             name="archive"
             value="true"
             disabled={removePending}
@@ -259,7 +269,6 @@ export function AccountEditSheet({
           </button>
           <button
             type="submit"
-            form={removeFormId}
             disabled={removePending}
             className={buttonClass('quiet')}
           >
@@ -267,7 +276,7 @@ export function AccountEditSheet({
           </button>
           <span className="tk-caption">Removing works only if it has no transactions yet.</span>
         </div>
-      </div>
+      </form>
     </Modal>
   )
 }

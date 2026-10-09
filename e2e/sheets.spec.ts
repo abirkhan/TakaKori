@@ -300,3 +300,75 @@ base.describe('sheets', () => {
     await expect(row).toBeVisible()
   })
 })
+
+/**
+ * The edit sheets' own buttons.
+ *
+ * `CategoryEditSheet` nested its remove form *inside* the update form. HTML does not
+ * allow that: the parser drops the inner `<form>` start tag, so the button's `form=`
+ * attribute referred to a form that did not exist and **removing a category silently did
+ * nothing**. No error, no row, no change — the three visible symptoms were a Next dev
+ * overlay count, which is not something a test suite looks at.
+ *
+ * Nothing caught it because no test removed a category. The transaction delete path is
+ * covered and uses a different shape, so the gap sat in a screen a user has to reach
+ * deliberately. These two tests are the gap closing.
+ */
+base.describe('edit sheets', () => {
+  base.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  authedTest('a category can be removed, and is gone', async ({ signedIn }) => {
+    const name = `E2E removable ${Date.now()}`
+
+    await signedIn.goto('/categories')
+    const form = signedIn.locator('form').filter({ hasText: 'Add category' })
+    await form.locator('[name="name"]').fill(name)
+    await form.getByRole('button', { name: 'Add' }).click()
+    await expect(signedIn.getByText(name).first()).toBeVisible({ timeout: 20_000 })
+
+    const row = signedIn.locator('li').filter({ hasText: name }).first()
+    await row.getByRole('button', { name: new RegExp(`^Edit`) }).click()
+
+    const sheet = signedIn.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await sheet.getByRole('button', { name: 'Remove category' }).click()
+
+    // The actual assertion, and the one that fails on the nested-form bug: the row is
+    // gone from the list rather than the sheet simply closing over an unsent form.
+    await expect(signedIn.getByText(name)).toHaveCount(0, { timeout: 20_000 })
+    await expect(sheet).toBeHidden({ timeout: 20_000 })
+  })
+
+  authedTest('an account can be archived from its sheet', async ({ signedIn }) => {
+    // Same shape, same class of bug. The account sheet had the sibling form but still
+    // pointed at it with `form=`, which is the submit React complains about.
+    await signedIn.goto('/accounts')
+    const first = signedIn.locator('[aria-label^="Edit "]').first()
+    const label = (await first.getAttribute('aria-label')) ?? ''
+    const name = label.replace(/^Edit /, '')
+
+    await first.click()
+    const sheet = signedIn.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await sheet.getByRole('button', { name: 'Archive instead' }).click()
+
+    await expect(sheet).toBeHidden({ timeout: 20_000 })
+    // Archived, not deleted: the row is still there and now says so.
+    // Archived, not deleted: the row is still there and now says so. Scoped to this
+    // row, because an earlier run may have left another account archived and a
+    // page-wide `getByText('archived')` matches both.
+    const archivedRow = signedIn.locator('li').filter({ hasText: name }).first()
+    await expect(archivedRow.getByText('archived')).toBeVisible({ timeout: 20_000 })
+
+    // Put it back, through the app, so the account does not stay archived for the rest
+    // of the run.
+    const row = signedIn.locator('li').filter({ hasText: name }).first()
+    if ((await row.count()) > 0) {
+      await row.getByRole('button', { name: /^Edit/ }).click()
+      const again = signedIn.getByRole('dialog')
+      await expect(again).toBeVisible()
+      const unarchive = again.getByRole('button', { name: /Archive/ })
+      if ((await unarchive.count()) > 0) await unarchive.click()
+    }
+  })
+})
