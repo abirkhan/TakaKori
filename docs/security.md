@@ -49,6 +49,19 @@ type.
 Without the type check, an expense filed under the "Salary" category would
 silently inflate income totals.
 
+`account_adjustments` needs the same guarantee and gets a second trigger,
+`private.assert_adjustment_same_workspace()`, rather than an extension of the
+transaction one. A trigger is bound to one table, and folding adjustments into
+`assert_same_workspace()` would have meant that function reading a table that
+transactions have no relationship to — so every transaction insert would pay for a
+check that could never apply to it. Two small functions that each know one shape
+are easier to verify than one that knows both and is wrong in the gap between.
+
+The failure this prevents is specific: a member of workspace A recording a
+correction against workspace B's account. The account row would not be readable to
+them, but nothing stops them writing to it, and the resulting adjustment would move
+a balance they cannot see.
+
 ### Validity that RLS cannot express
 
 Posting an occurrence of a recurring rule is not a row-access question, so no
@@ -88,6 +101,24 @@ not application conventions:
 Validation in `lib/validations.ts` mirrors these to produce a readable error.
 **The database is the authority.** Application validation can be bypassed by
 calling the API directly; the CHECK constraint cannot.
+
+### `account_adjustments.amount` is signed, and that is not a gap in the list above
+
+Every other money column in this schema is `> 0` with the direction carried
+elsewhere — a transaction's direction is in `type`. An adjustment has no `type`, so
+there is nowhere to put the direction but the sign, and a `> 0` CHECK would have made
+half the corrections unrepresentable. It is `numeric(14,2) not null` with no
+positivity constraint, and that asymmetry is deliberate.
+
+The invariant it *does* keep is length: `char_length(reason) <= 200`, with `reason`
+nullable rather than `not null default ''`, so "no reason given" stays
+distinguishable from a reason that happens to be blank.
+
+Zero is refused at the action layer rather than by a CHECK. A zero correction would
+pass every database constraint and sit in the ledger looking like a record while
+changing nothing — and a `CHECK (amount <> 0)` would forbid a user correcting a
+figure with the same figure, which is the one input that should be a no-op without
+costing them a ledger entry explaining nothing happened.
 
 ## Money
 

@@ -1367,3 +1367,93 @@ costs them trust in their own ledger.
 its own error path — `enqueue` returns a result instead of the `void` the cache's
 `idbSet` callers expect. That asymmetry is the point, and it is why the two stores
 share a module but not a contract.
+
+## ADR-044 - A closed sheet is not in the DOM
+
+`Modal` returns `null` when it is closed, on the server and the client alike.
+
+**The context.** React error #418 — "the server rendered HTML didn't match the
+client" — appeared on every authed screen, on every load. Two plausible causes had
+already been eliminated: a stale service-worker document, and `useQuery` reading a
+warmed cache during hydration. Both were good hypotheses and both were wrong.
+
+**The decision.** `Modal` renders nothing until it is open. It used to return `null`
+only on the server, where there is no `document`, and render its portal on the client
+*whether or not it was open* — so a closed sheet existed in the client's DOM and not
+in the server's, and React gave up on hydrating the tree. The app bar's "More" dialog
+is mounted closed on every authed screen, which is why it was every screen.
+
+**Why this needed an ADR rather than a patch.** The behaviour it replaces was
+asserted. `e2e/sheets.spec.ts` required `toHaveCount(1)` for a closed sheet, on the
+reasoning that if the primitive set `display` unconditionally it would defeat the
+UA's `dialog:not([open]) { display: none }` and become an invisible overlay that
+still swallowed clicks. That reasoning was correct and is still true, but the test
+was satisfied by an element that was correctly *invisible* while still being
+*present* — and a visual assertion cannot see a hidden node. The bug was live behind
+a green suite for as long as it existed.
+
+The original hazard is not gone, it is shorter: between the dialog mounting and
+`showModal()` there is a window where it is in the DOM without `open`. The test now
+covers that window explicitly rather than by accident.
+
+**Consequence.** Closing a sheet is an unmount rather than a `close()` call, so a
+sheet with an exit animation would lose it. `Modal` has none, and the one it replaced
+had none either. A correct first paint is worth more than a transition.
+
+The generalisable half: **an assertion about what is *not painted* is not an
+assertion about what is *not there*.** Where a bug lives in DOM structure rather than
+appearance, the test has to look at structure or it will pass.
+
+## ADR-045 - A correction is a row, not an overwrite
+
+An account's opening balance is corrected by recording an `account_adjustments` row
+— signed, with an optional reason — never by editing `opening_balance`.
+
+**The context.** The Account screen offered an opening-balance field, pre-filled from
+the account row. On an account reading ৳5,000.00 with a real transaction behind it,
+that field showed `0.00`. Both numbers were true; neither said which was which, and
+the one input offering to correct the balance held the one number that was not the
+balance. Verified against the database: that account's `opening_balance` really was
+0.00.
+
+Editing it was also the wrong *kind* of operation. `opening_balance` is a starting
+point with no ledger entry behind it, so overwriting it moves every balance derived
+from it and explains none of the change — the user watches a number move and has no
+way to find out why or undo it.
+
+**The decision.** Three parts, and the first two follow from the third.
+
+1. **A separate table, not a fourth transaction type.** A type would have to be added
+   to `transactions_type_check`, and every aggregate that splits income from expense
+   by type filter would then need to handle it deliberately: `workspace_totals`,
+   `net_balance`, `account_balances`, `expense_by_category` and the range RPCs. An
+   adjustment belongs to neither bucket, so any of those left unchanged would exclude
+   it and `net_balance` would be quietly wrong — ADR-012 exactly, a balance that
+   reads plausibly and is not. As its own table it is not a transaction at all, so
+   income and expense totals are untouched by construction and only two balance views
+   change.
+2. **`amount` is signed.** A transaction's is `> 0` with the direction in `type`. An
+   adjustment has no type to encode direction in, so the sign is the direction.
+3. **One field stating a *difference*, not a target.** The user says how much the
+   balance should differ by. A field taking an absolute target would have to infer a
+   direction from the computed figure — which is the one most likely to be what the
+   user is trying to fix — and a positive-only field could not express a downward
+   correction at all. Zero is refused: it would sit in the ledger looking like a
+   record while changing nothing.
+
+**The fix that had to move.** `openingBalance` was *required* on `updateAccountAction`,
+because a PATCH is not a merge and a form omitting the field would write `'0.00'` over
+a real balance. That requirement is correct and it is exactly what forced the sheet to
+display the field. So the hazard moved down into `updateAccount`, which now omits the
+key unless a caller supplies one, and the requirement went away with the field.
+
+**Consequence.** The sheet shows a breakdown instead — balance, opening balance,
+transactions, corrections — where "from transactions" is derived by subtraction rather
+than re-queried. Two reads could disagree under concurrent writes, and a breakdown
+that does not add up reads as the user's arithmetic error.
+
+Every correction is removable. That was nearly missed: the schema comment and the
+design both called adjustments reversible when there was no way to reverse one, and
+the E2E suite found it by recording corrections it could not clean up, which drifted
+the shared test account by ৳753.10 over a few runs. **A feature described as reversible
+is not reversible until something can undo it.**

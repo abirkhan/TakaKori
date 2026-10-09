@@ -10,10 +10,14 @@ changes. Never edit the schema through the Supabase dashboard.
 
 ```
 auth.users ──┬── profiles          (1:1, preferences)
-             └── workspace_members ── workspaces ──┬── accounts
-                                                   ├── categories
-                                                   └── transactions
+             └── workspace_members ── workspaces ──┬── accounts ──┬── transactions
+                                                   │              └── account_adjustments
+                                                   └── categories
 ```
+
+`account_adjustments` hangs off `accounts` rather than off `workspaces` directly
+because an adjustment is meaningless without an account — it is a signed correction
+to one account's balance, never a workspace-level figure.
 
 ### Tenancy
 
@@ -42,6 +46,18 @@ negative (a card already owed).
 `(workspace_id, type, lower(name))`.
 
 **transactions** — see below.
+
+**account_adjustments** — signed corrections to one account's balance, outside income
+and expense. `amount` is `numeric(14,2) not null` and **may be negative**, which is the
+one place in this schema where a money column carries its own direction: a transaction's
+direction is in `type`, and an adjustment has no `type`. `reason` is nullable and
+capped at 200 characters. `on delete restrict` on `account_id` — deleting an account
+with corrections against it needs a decision, not a cascade.
+
+This table exists instead of a fourth `transactions.type`. See ADR-045 for why the
+type route was rejected: every aggregate that splits income from expense by type filter
+would have needed to handle a value belonging to neither bucket, and any one left
+unchanged would have excluded the adjustment and made `net_balance` quietly wrong.
 
 ### The transactions table
 
@@ -123,6 +139,21 @@ RLS applies to the caller rather than the view owner.
 `account_balances` treats a transfer as −amount on the source and +amount on
 the destination, so a workspace total correctly nets transfers to zero.
 
+`account_balances` also adds `account_adjustments` as a third movement source. It is
+the **only** view whose definition accounts for corrections, and that is the point of
+ADR-045: a correction moves a balance, and nothing else. `workspace_totals`
+deliberately does not, because a correction is neither income nor spending and adding
+it there would file a reconciliation under "income this month".
+
+The migration carries a `DO` block that asserts every account's balance still equals
+`opening_balance + movements + adjustments`, and raises if it does not. It is the
+invariant ADR-012 exists to protect, expressed as something that fails loudly rather
+than as a comment. It earned its place immediately: it caught a rewrite of the view
+that had reintroduced the original income-attribution bug — income folded into the
+transfer branch under `counterparty_account_id`, which is `NULL` for income, so every
+income row was attributed to no account and dropped. The rewrite was written from the
+superseded `views.sql` rather than from the live definition.
+
 ## Indexes
 
 Every index exists to serve a specific access path.
@@ -133,6 +164,8 @@ Every index exists to serve a specific access path.
 | `transactions_account_id_idx`         | per-account balance and history                 |
 | `workspace_members_user_id_idx`       | the membership lookup in **every** RLS policy   |
 | `categories_workspace_type_name_key`  | category-name uniqueness                        |
+| `account_adjustments_account_id`      | the per-account correction list and balance     |
+| `account_adjustments_workspace_id`    | workspace-scoped reads and RLS predicate cost   |
 
 Adding an RLS predicate on a column means adding an index on that column.
 
