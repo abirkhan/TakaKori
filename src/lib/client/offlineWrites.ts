@@ -80,6 +80,32 @@ const COLUMNS: Record<string, Record<string, string>> = {
     name: 'name',
     kind: 'kind',
   },
+  /**
+   * Audited against `RecurringForm` and `recurringSchema` rather than assumed.
+   *
+   * `counterpartyAccountId` is absent on purpose: `RecurringForm` never renders that
+   * field, so a queued payload can never contain it. It reads as an omission and is not
+   * one — mapping a field the form does not have would make the drain believe it can
+   * populate something it cannot, and the mismatch would only surface as a permanent
+   * `check_violation` on a transfer rule. (`createRecurringAction` rejects one anyway:
+   * it has no destination to give, and says so.)
+   *
+   * `endsOn` is the reason this kind was left out originally, and the reason is now
+   * fixed rather than worked around: it is an optional date, so an unbounded rule
+   * queues `''` against a `date` column. `applyQueued`'s `normaliseEmptyToNull` turns
+   * that into `null`, which is exactly what the action does with it.
+   */
+  'recurring.create': {
+    type: 'type',
+    amount: 'amount',
+    accountId: 'account_id',
+    categoryId: 'category_id',
+    description: 'description',
+    frequency: 'frequency',
+    intervalCount: 'interval_count',
+    anchorDate: 'anchor_date',
+    endsOn: 'ends_on',
+  },
   'category.create': { name: 'name', type: 'type' },
   'category.update': { id: 'id', name: 'name', type: 'type' },
   'budget.create': { amount: 'amount', categoryId: 'category_id' },
@@ -96,12 +122,6 @@ const COLUMNS: Record<string, Record<string, string>> = {
  *
  * Derived from `COLUMNS`, so the two cannot drift: a kind with no field mapping
  * cannot be queued, and `applyQueuedWrite` refuses anything it cannot replay.
- *
- * **`recurring.create` is deliberately absent.** Its form has a dozen fields and they
- * have not been read against `RecurringForm`, and a mapping guessed from a
- * neighbouring form is how a queued rule arrives with a null where an amount belongs.
- * Omitting it is safe by construction — the write is refused offline with a plain
- * message — and adding it is a small, checkable change.
  */
 export const QUEUEABLE_KINDS = Object.keys(COLUMNS) as QueuedWriteKind[]
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyQueuedWrite, type WriteClient } from './applyQueued'
+import { QUEUEABLE_KINDS, payloadFor } from './offlineWrites'
 import type { QueuedWrite } from './outbox'
 
 /**
@@ -401,5 +402,176 @@ describe('applyQueuedWrite - deletes', () => {
       queued({ kind: 'recurring.delete', payload: { id: 'r1' } }),
     )
     expect(rule.calls[0]).toEqual({ op: 'from', arg: 'recurring_transactions' })
+  })
+})
+/**
+ * The empty-string invariant, and coverage of every kind at once.
+ *
+ * **These were written after I got something wrong.** Enabling `recurring.create`
+ * required auditing its fields, and I expected to find that a queued rule with no end
+ * date put `''` into a `date` column — `22007`, permanently, on every drain. I wrote a
+ * guard and tests asserting the defect.
+ *
+ * Then I read `payloadFor`. It drops empty fields when it shapes a form into a row, so
+ * an unfilled `endsOn` never reaches the payload and the column takes its default.
+ * There was no defect. The guard in `applyQueued` stayed as a second line of defence
+ * for a payload written by an older build, and these tests assert what is actually
+ * true — including the upstream drop, which is the invariant worth pinning.
+ */
+describe('payloadFor — the upstream invariant', () => {
+  /** A form carrying every field any kind might want, with the optional ones blank. */
+  function blankForm(): FormData {
+    const fd = new FormData()
+    const fields: Record<string, string> = {
+      id: '22222222-2222-4222-8222-222222222222',
+      type: 'expense',
+      amount: '100.00',
+      accountId: '33333333-3333-4333-8333-333333333333',
+      categoryId: '',
+      counterpartyAccountId: '',
+      occurredOn: '2026-10-09',
+      description: '',
+      name: '',
+      kind: 'cash',
+      openingBalance: '',
+      intervalCount: '1',
+      frequency: 'monthly',
+      anchorDate: '2026-10-09',
+      endsOn: '',
+      occurrenceDate: '2026-10-09',
+    }
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v)
+    return fd
+  }
+
+  it('drops an unfilled optional field rather than storing an empty string', () => {
+    // The real defence. `ends_on` is a `date`, so a queued `''` would be `22007`.
+    const payload = payloadFor('recurring.create', blankForm())
+    expect(payload).not.toBeNull()
+    expect('ends_on' in payload!).toBe(false)
+  })
+
+  it('keeps a filled one', () => {
+    const fd = blankForm()
+    fd.set('endsOn', '2027-01-31')
+    expect(payloadFor('recurring.create', fd)?.ends_on).toBe('2027-01-31')
+  })
+
+  it('drops an empty field for every kind that maps one', () => {
+    // Not a spot check. A kind added later with a different shaping rule is exactly
+    // the case this would miss.
+    for (const kind of QUEUEABLE_KINDS) {
+      const payload = payloadFor(kind, blankForm())
+      expect(payload, `${kind} produced no payload`).not.toBeNull()
+      const empties = Object.entries(payload!).filter(([, v]) => v === '')
+      expect(empties.map(([k]) => k), `${kind} queued an empty string`).toEqual([])
+    }
+  })
+
+  it('refuses a kind it cannot replay, rather than queueing it', () => {
+    // The other half of the derivation: no mapping, no queue entry.
+    expect(payloadFor('not.a.kind' as never, blankForm())).toBeNull()
+  })
+})
+
+describe('every queueable kind', () => {
+  /**
+   * Offering to queue a write the drain cannot perform is the failure `QUEUEABLE_KINDS`
+   * exists to prevent, and the derivation is only as good as the two lists agreeing.
+   * Each kind is driven through the real shaping and the real replay together, so a
+   * mapping to a column that does not exist — which would be a permanent failure on
+   * every drain, invisible until one happens — is a failure here instead.
+   */
+  it('replays every kind the app offers to queue', async () => {
+    const fd = new FormData()
+    const fields: Record<string, string> = {
+      id: '22222222-2222-4222-8222-222222222222',
+      type: 'expense',
+      amount: '100.00',
+      accountId: '33333333-3333-4333-8333-333333333333',
+      occurredOn: '2026-10-09',
+      intervalCount: '1',
+      frequency: 'monthly',
+      anchorDate: '2026-10-09',
+      occurrenceDate: '2026-10-09',
+    }
+    for (const [k, v] of Object.entries(fields)) fd.append(k, v)
+
+    for (const kind of QUEUEABLE_KINDS) {
+      const payload = payloadFor(kind, fd)
+      expect(payload, `${kind} has no mapping`).not.toBeNull()
+      const { client } = fakeClient({ existing: { data: null } })
+      const result = await applyQueuedWrite(ctxFor(client), queued({ kind, payload: payload! }))
+      expect(result.ok, `${kind} did not replay`).toBe(true)
+    }
+  })
+
+  it('replays recurring.create with the fields RecurringForm actually renders', async () => {
+    // Audited rather than assumed. `counterpartyAccountId` is deliberately absent:
+    // `RecurringForm` never renders it, so mapping it would make the drain believe it
+    // can populate something the form cannot produce.
+    const fd = new FormData()
+    for (const [k, v] of Object.entries({
+      type: 'expense',
+      amount: '2500.00',
+      accountId: '33333333-3333-4333-8333-333333333333',
+      categoryId: '44444444-4444-4444-8444-444444444444',
+      frequency: 'monthly',
+      intervalCount: '1',
+      anchorDate: '2026-10-09',
+    })) {
+      fd.append(k, v)
+    }
+
+    const { client, calls } = fakeClient({ existing: { data: null } })
+    const result = await applyQueuedWrite(
+      ctxFor(client),
+      queued({ kind: 'recurring.create', payload: payloadFor('recurring.create', fd)! }),
+    )
+
+    expect(result).toEqual({ ok: true })
+    const insert = calls.find((c) => c.op === 'insert')?.arg as Record<string, unknown>
+    expect(insert).toMatchObject({
+      account_id: '33333333-3333-4333-8333-333333333333',
+      category_id: '44444444-4444-4444-8444-444444444444',
+      amount: '2500.00',
+      frequency: 'monthly',
+      interval_count: '1',
+      anchor_date: '2026-10-09',
+    })
+    // Column names, not the form's camelCase. Passing camelCase keys straight to the
+    // replay and concluding `ends_on` was missing is a mistake I made once already.
+    expect(insert).not.toHaveProperty('accountId')
+    expect(insert).not.toHaveProperty('anchorDate')
+  })
+
+  it('normalises a stray empty string to null rather than posting it', async () => {
+    // Second line of defence. `payloadFor` drops empties today, but the payload is
+    // durable data in IndexedDB written by whichever build queued it — an older record,
+    // or a kind shaped differently later, could carry one. Against a `uuid` or `date`
+    // column that is a permanent failure.
+    const { client, calls } = fakeClient({ existing: { data: null } })
+    await applyQueuedWrite(
+      ctxFor(client),
+      queued({ payload: { amount: '10.00', category_id: '', account_id: '' } }),
+    )
+
+    const insert = calls.find((c) => c.op === 'insert')?.arg as Record<string, unknown>
+    expect(insert.category_id).toBeNull()
+    expect(insert.account_id).toBeNull()
+  })
+
+  it('does not treat 0 or false as empty', async () => {
+    // A truthiness test would null an `interval_count` of 0 and let the column default
+    // mask an invalid value rather than rejecting it.
+    const { client, calls } = fakeClient({ existing: { data: null } })
+    await applyQueuedWrite(
+      ctxFor(client),
+      queued({ kind: 'recurring.create', payload: { interval_count: '0', ends_on: '' } }),
+    )
+
+    const insert = calls.find((c) => c.op === 'insert')?.arg as Record<string, unknown>
+    expect(insert.interval_count).toBe('0')
+    expect(insert.ends_on).toBeNull()
   })
 })

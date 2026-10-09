@@ -50,6 +50,20 @@ export interface QueuedWrite {
   /** Why it failed. Only ever shown when `status` is `failed`. */
   failure?: string
   attempts: number
+  /**
+   * The last failure would never succeed on its own, so this write is parked until
+   * the user does something about it.
+   *
+   * **This flag is the difference between a transient failure and a dead end, and
+   * nothing could tell them apart before.** A dropped connection fails every queued
+   * write and must be retried on the next drain without being asked. A duplicate
+   * category name fails the same way, forever, with the same payload — retrying it
+   * on every app open burned a request per drain to learn nothing, and left the row
+   * sitting there showing a reason the user had no way to act on.
+   *
+   * `drain` skips these; `retry` clears it once the user has fixed the cause.
+   */
+  permanentFailure?: boolean
 }
 
 /**
@@ -170,7 +184,15 @@ export async function enqueue(
   write: Omit<QueuedWrite, 'status' | 'attempts'>,
   store: OutboxStore = indexedDbOutbox,
 ): Promise<boolean> {
-  const stored = await store.put({ status: 'queued', attempts: 0, ...write })
+  const stored = await store.put({
+    status: 'queued',
+    attempts: 0,
+    // Explicitly false rather than left undefined. A consumer filtering on this flag
+    // should not have to treat "never failed" and "failed but retryable" as different
+    // shapes of the same value.
+    permanentFailure: false,
+    ...write,
+  })
   // Announced only on success. A failed enqueue changes nothing for a subscriber to
   // notice, and the caller is about to render an error instead.
   if (stored) announce()
@@ -180,9 +202,13 @@ export async function enqueue(
 export interface DrainResult {
   /** Applied and removed from the queue. */
   applied: number
-  /** Rejected on a permanent basis; still queued, marked failed, with a reason. */
+  /** Rejected during this pass; still queued, marked failed, with a reason. */
   failed: number
-  /** Still waiting — either untouched, or behind a retryable failure. */
+  /**
+   * Still waiting — untouched, behind a retryable failure, or parked from an earlier
+   * pass. Includes parked rows, which are waiting on the *user* rather than on a
+   * connection.
+   */
   remaining: number
   /**
    * True when the drain stopped early because a retryable failure means every
@@ -204,12 +230,31 @@ export interface DrainResult {
  * A failed write keeps its place in the queue. It is not discarded: the user may
  * fix the conflict and retry, and silently dropping a write the app could not
  * perform is the failure mode this whole feature is against.
+ *
+ * **A permanently-failed write is skipped, and that is the point.** It stays in the
+ * queue, keeps its reason, and stays visible — but the drain does not attempt it
+ * again until `retry` clears the flag. Before this, a queued write whose name was
+ * already taken was re-sent on every app open and every `online` event, failed the
+ * same way, and incremented `attempts` forever. The user saw a row that never moved
+ * and had no way to make it move: a dead end wearing the app's own "nothing is lost"
+ * promise.
  */
 export async function drain(
   apply: ApplyFn,
   store: OutboxStore = indexedDbOutbox,
 ): Promise<DrainResult> {
-  const writes = (await store.all()).sort((a, b) => a.queuedAt - b.queuedAt)
+  const all = await store.all()
+
+  /**
+   * Parked rows are carried through untouched and counted as remaining.
+   *
+   * They are not `failed` — they failed some time ago and nothing has been tried
+   * since — and they are not `applied`. Counting them as failures would make a drain
+   * report a permanent failure that did not happen during it, which is the sort of
+   * number that is technically defensible and completely misleading.
+   */
+  const writes = all.filter((w) => !w.permanentFailure).sort((a, b) => a.queuedAt - b.queuedAt)
+  const parked = all.length - writes.length
 
   let applied = 0
   let failed = 0
@@ -230,6 +275,9 @@ export async function drain(
       ...write,
       status: 'failed',
       failure: result.error,
+      // The flag, not just the message. This is what stops the next drain repeating
+      // a failure that cannot change.
+      permanentFailure: result.retryable ? false : true,
       attempts: write.attempts + 1,
     })
     failed += 1
@@ -244,10 +292,92 @@ export async function drain(
        * pending row that never clears teaches users that the label is decoration.
        */
       announce()
-      return { applied, failed, remaining: writes.length - applied - failed, stopped: true }
+      return {
+        applied,
+        failed,
+        remaining: parked + (writes.length - applied - failed),
+        stopped: true,
+      }
     }
   }
 
   announce()
-  return { applied, failed, remaining: writes.length - applied - failed, stopped: false }
+  return {
+    applied,
+    failed,
+    remaining: parked + (writes.length - applied - failed),
+    stopped: false,
+  }
+}
+
+/**
+ * Parked writes the user has to deal with.
+ *
+ * A separate read rather than a filter inside `PendingWrites`, so the "this needs
+ * you" set is defined once. It is also the set the UI offers a retry and a discard
+ * for — offering either on a write that is merely waiting would invite a user to
+ * throw away an entry the next drain would have applied.
+ */
+export function parkedWrites(writes: QueuedWrite[]): QueuedWrite[] {
+  return writes.filter((write) => write.status === 'failed' && write.permanentFailure === true)
+}
+
+/**
+ * Put a parked write back in line.
+ *
+ * **`patch` is the part that makes this usable rather than merely present.** Replaying
+ * a write that failed because its category name was taken, unchanged, fails for the
+ * same reason — the user renames the category in the app and the queued payload still
+ * carries the old name. So the caller supplies the corrected value, and this merges it
+ * in. Without that, "Try again" is a button that fails identically forever.
+ *
+ * The id is **not** regenerated. It is the idempotency key (ADR-042), so reusing it
+ * is what makes a retry converge against a write that already landed rather than
+ * creating a second row.
+ *
+ * Returns false when the id is not in the queue — a stale retry from a stale UI must
+ * not silently re-appear as a new entry.
+ */
+export async function retryQueuedWrite(
+  id: string,
+  patch: Record<string, unknown> = {},
+  store: OutboxStore = indexedDbOutbox,
+): Promise<boolean> {
+  const write = (await store.all()).find((w) => w.id === id)
+  if (!write) return false
+
+  const stored = await store.put({
+    ...write,
+    payload: { ...write.payload, ...patch },
+    status: 'queued',
+    // Cleared, not left as a string: the row is no longer failed, and a stale reason
+    // shown next to a waiting row would be the app contradicting itself on one line.
+    failure: undefined,
+    permanentFailure: false,
+  })
+  if (stored) announce()
+  return stored
+}
+
+/**
+ * Give up on a queued write and delete it.
+ *
+ * **The one place the outbox loses data, and it is deliberate and user-initiated.**
+ * Every other path keeps a write it could not perform, because silently dropping one
+ * is the failure this whole feature is against. A parked row with no escape is the
+ * same failure approached from the other side: the user holds an entry they can
+ * neither apply nor remove, and the only remedy becomes clearing site data.
+ *
+ * Returns false when the id is not in the queue, so a double-tap cannot report
+ * having discarded something it did not.
+ */
+export async function discardQueuedWrite(
+  id: string,
+  store: OutboxStore = indexedDbOutbox,
+): Promise<boolean> {
+  const write = (await store.all()).find((w) => w.id === id)
+  if (!write) return false
+  await store.remove(id)
+  announce()
+  return true
 }

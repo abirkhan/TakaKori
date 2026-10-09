@@ -233,8 +233,11 @@ async function updateRow(
   const id = targetId(write)
   if (!id) return { ok: false, error: 'This change has nothing to change.', retryable: false }
 
-  const { id: _moved, ...changes } = write.payload
+  const { id: _moved, ...raw } = write.payload
   void _moved
+  // Same normalisation as `createRow`, and for the same reason: an edit replayed
+  // offline skips the action that would have dropped an empty optional field.
+  const changes = normaliseEmptyToNull(raw)
 
   const updated = await ctx.supabase
     .from(table)
@@ -291,6 +294,37 @@ async function postOccurrence(ctx: ApplyContext, write: QueuedWrite): Promise<Ap
  * "did this already land?" is answerable without trusting any server-side record of
  * what was attempted.
  */
+/**
+ * Empty strings, turned into `null`, as a second line of defence.
+ *
+ * **The real invariant lives upstream and this is not where the bug was.** `payloadFor`
+ * drops empty fields when it shapes a form into a row — an unfilled `endsOn` never
+ * reaches the payload at all, so the column takes its default. That is the same shape
+ * the Server Action produces, and it is why `recurring.create` could be audited in and
+ * found safe rather than dangerous. (I expected this to be broken, wrote the guard
+ * against a `22P02` that could not happen, and was wrong.)
+ *
+ * This stays because the payload is durable data in IndexedDB, written by whichever
+ * build queued it. A record stored by an older build, a kind added later with a
+ * different shaping rule, or a hand-edited store could all carry `''` into a `uuid` or
+ * `date` column, and the failure mode is a permanent one — the same payload failing
+ * identically on every drain — for a value the online path treats as "not filled in".
+ *
+ * `null` rather than dropping the key: dropping is `payloadFor`'s job, and this layer
+ * has already been given a payload it cannot reshape. `null` and absent agree for every
+ * column here — the only nullable ones are `uuid`, `date` and `text`, where an explicit
+ * null and the default are the same answer.
+ */
+function normaliseEmptyToNull(payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    // Only the empty string. `0` and `false` are real values, and `=== ''` does not
+    // touch them — a truthiness test would silently zero an interval of 0.
+    out[key] = value === '' ? null : value
+  }
+  return out
+}
+
 async function createRow(
   ctx: ApplyContext,
   table: string,
@@ -327,7 +361,7 @@ async function createRow(
    * payload-controlled in the first place.
    */
   const row = {
-    ...write.payload,
+    ...normaliseEmptyToNull(write.payload),
     id,
     workspace_id: ctx.workspaceId,
   }

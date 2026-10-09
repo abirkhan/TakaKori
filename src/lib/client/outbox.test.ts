@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { drain, enqueue, indexedDbOutbox, type ApplyFn, type QueuedWrite } from './outbox'
+import {
+  discardQueuedWrite,
+  drain,
+  enqueue,
+  indexedDbOutbox,
+  parkedWrites,
+  retryQueuedWrite,
+  type ApplyFn,
+  type QueuedWrite,
+} from './outbox'
 import { idbAll, idbSet } from './idb'
 
 vi.mock('./idb', () => ({
@@ -210,5 +219,204 @@ describe('drain', () => {
 
     expect(second.applied).toBe(0)
     expect(rows.size).toBe(0)
+  })
+})
+/**
+ * Parking, and the two ways out.
+ *
+ * **This was a dead end and it is the reason these exist.** A queued write the server
+ * permanently rejects kept its place in the queue — which is right, because dropping it
+ * silently is the failure ADR-043 is against — and `drain` attempted it on every pass.
+ * So a category name that was already taken was re-sent on every app open and every
+ * `online` event, failed identically, and incremented `attempts` forever. The row stayed
+ * visible with the honest reason and no way to act on it. There was no retry and no
+ * discard, because the module exported only `enqueue` and `drain`.
+ *
+ * Two fixes, and the first is the one that actually changes the behaviour: the store now
+ * records *whether* a failure was permanent, because a dropped connection and a
+ * duplicate name arrive identically and must not be treated identically. The second is
+ * that a parked write is skipped until the user says otherwise.
+ */
+describe('parked writes', () => {
+  it('does not re-attempt a permanently failed write', async () => {
+    // The core of it: this row has already failed permanently, and the drain used to
+    // send it again on every pass, failing the same way forever.
+    const { store, rows } = memoryStore([
+      write({ id: 'parked', status: 'failed', permanentFailure: true, attempts: 4 }),
+    ])
+    let called = 0
+    const apply: ApplyFn = async () => {
+      called += 1
+      return { ok: true }
+    }
+
+    const result = await drain(apply, store)
+
+    expect(called).toBe(0)
+    // Still held. "Not attempted" must never read as "gone".
+    expect(rows.size).toBe(1)
+    expect(result).toMatchObject({ applied: 0, failed: 0, remaining: 1 })
+  })
+
+  it('counts a parked row as remaining, not as a fresh failure', async () => {
+    // Reporting a permanent failure that did not happen during this pass is the kind of
+    // number that is defensible and completely misleading.
+    const { store } = memoryStore([
+      write({ id: 'p1', status: 'failed', permanentFailure: true, queuedAt: 1 }),
+      write({ id: 'p2', status: 'failed', permanentFailure: true, queuedAt: 2 }),
+      write({ id: 'ok', queuedAt: 3 }),
+    ])
+
+    const result = await drain(async () => ({ ok: true }), store)
+    expect(result).toMatchObject({ applied: 1, failed: 0, remaining: 2, stopped: false })
+  })
+
+  it('still attempts a transiently failed write', async () => {
+    // A dropped connection must auto-retry. Skipping these would strand every write
+    // made during an outage until the user noticed and pressed something.
+    const { store, rows } = memoryStore([
+      write({ id: 't1', status: 'failed', permanentFailure: false, attempts: 2 }),
+    ])
+
+    const result = await drain(async () => ({ ok: true }), store)
+    expect(rows.size).toBe(0)
+    expect(result.applied).toBe(1)
+  })
+
+  it('does not block a healthy write that sits behind a parked one', async () => {
+    // Ordering is by `queuedAt` and a parked row is usually older. If parking stopped
+    // the pass, everything recorded after a conflict would be stuck behind it.
+    const { store } = memoryStore([
+      write({ id: 'old-parked', queuedAt: 1, status: 'failed', permanentFailure: true }),
+      write({ id: 'new-ok', queuedAt: 2 }),
+    ])
+    const attempted: string[] = []
+
+    await drain(async (w) => {
+      attempted.push(w.id)
+      return { ok: true }
+    }, store)
+
+    expect(attempted).toEqual(['new-ok'])
+  })
+
+  it('records the flag on a permanent failure, and not on a transient one', async () => {
+    // Without this the two are indistinguishable on the next pass, which is the whole
+    // problem: one must auto-retry and one must not.
+    const { store, rows } = memoryStore([write({ id: 'a', queuedAt: 1 }), write({ id: 'b', queuedAt: 2 })])
+    await drain(async (w) =>
+      w.id === 'a'
+        ? { ok: false, error: 'duplicate', retryable: false }
+        : { ok: false, error: 'network', retryable: true },
+    store)
+
+    expect(rows.get('a')?.permanentFailure).toBe(true)
+    expect(rows.get('b')?.permanentFailure).toBe(false)
+  })
+
+  it('clears a stale flag when a retried write fails transiently instead', async () => {
+    // Otherwise one dropped connection re-parks it forever, and the user is back to a
+    // row that cannot move.
+    const { store, rows } = memoryStore([
+      write({ id: 'x', status: 'failed', permanentFailure: true, failure: 'duplicate' }),
+    ])
+    await retryQueuedWrite('x', {}, store)
+    await drain(async () => ({ ok: false, error: 'network', retryable: true }), store)
+
+    expect(rows.get('x')?.permanentFailure).toBe(false)
+  })
+
+  it('selects the parked set for the UI, and only that set', () => {
+    const rows = [
+      write({ id: 'a', status: 'failed', permanentFailure: true }),
+      write({ id: 'b', status: 'failed', permanentFailure: false }),
+      write({ id: 'c', status: 'queued' }),
+    ]
+    expect(parkedWrites(rows).map((w) => w.id)).toEqual(['a'])
+    expect(parkedWrites([write()])).toEqual([])
+  })
+})
+
+describe('retryQueuedWrite', () => {
+  it('clears the flag, so the next drain attempts it', async () => {
+    const { store } = memoryStore([write({ id: 'p', status: 'failed', permanentFailure: true })])
+    await retryQueuedWrite('p', {}, store)
+
+    let called = 0
+    await drain(async () => {
+      called += 1
+      return { ok: true }
+    }, store)
+    expect(called).toBe(1)
+  })
+
+  it('clears the failure message', async () => {
+    // A stale reason beside a row now waiting reads as the app contradicting itself on
+    // one line.
+    const { store, rows } = memoryStore([
+      write({ id: 'p', status: 'failed', permanentFailure: true, failure: 'duplicate' }),
+    ])
+    await retryQueuedWrite('p', {}, store)
+    expect(rows.get('p')?.failure).toBeUndefined()
+  })
+
+  it('merges a corrected value into the payload', async () => {
+    // The reason `patch` exists. Replaying a write that failed because its name was
+    // taken, unchanged, fails for the same reason: the user renames the category in
+    // the app and the queued payload still carries the old name. Without this, "Try
+    // again" is a button that fails identically forever — worse than no button,
+    // because it looks like progress.
+    const { store, rows } = memoryStore([
+      write({
+        id: 'p',
+        kind: 'category.create',
+        payload: { name: 'Food', type: 'expense' },
+        permanentFailure: true,
+      }),
+    ])
+    await retryQueuedWrite('p', { name: 'Eating out' }, store)
+    expect(rows.get('p')?.payload).toEqual({ name: 'Eating out', type: 'expense' })
+  })
+
+  it('keeps the id, so a retry converges instead of duplicating', async () => {
+    // The id is the idempotency key (ADR-042). A new one here would be a second row.
+    const { store, rows } = memoryStore([write({ id: 'p', permanentFailure: true })])
+    await retryQueuedWrite('p', { name: 'New' }, store)
+    expect(rows.get('p')?.id).toBe('p')
+  })
+
+  it('reports false for an id that is not queued', async () => {
+    // A stale retry from a stale UI must not reappear as a brand new entry.
+    const { store, rows } = memoryStore([write({ id: 'here' })])
+    expect(await retryQueuedWrite('gone', {}, store)).toBe(false)
+    expect(rows.size).toBe(1)
+  })
+})
+
+describe('discardQueuedWrite', () => {
+  it('removes a parked write', async () => {
+    const { store, rows } = memoryStore([write({ id: 'p', permanentFailure: true })])
+    expect(await discardQueuedWrite('p', store)).toBe(true)
+    expect(rows.size).toBe(0)
+  })
+
+  it('removes a waiting write too', async () => {
+    // Otherwise "discard" appears to work only on failures, and a user who mistyped an
+    // offline entry has no way to undo it.
+    const { store, rows } = memoryStore([write({ id: 'w' })])
+    expect(await discardQueuedWrite('w', store)).toBe(true)
+    expect(rows.size).toBe(0)
+  })
+
+  it('reports false for an unknown id, so a double tap cannot lie', async () => {
+    const { store } = memoryStore([write({ id: 'a' })])
+    expect(await discardQueuedWrite('a', store)).toBe(true)
+    expect(await discardQueuedWrite('a', store)).toBe(false)
+  })
+
+  it('leaves the rest of the queue alone', async () => {
+    const { store, rows } = memoryStore([write({ id: 'a', queuedAt: 1 }), write({ id: 'b', queuedAt: 2 })])
+    await discardQueuedWrite('a', store)
+    expect([...rows.keys()]).toEqual(['b'])
   })
 })
