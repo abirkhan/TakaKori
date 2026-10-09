@@ -102,6 +102,149 @@ export async function createCategory(
   return data
 }
 
+/**
+ * Change an account.
+ *
+ * **Editing `opening_balance` is the whole reason this exists, and it has no
+ * ledger entry behind it.** The balance moves because the *starting point* moved,
+ * not because anything was spent or earned, so no transaction explains the
+ * difference. That is the right trade for correcting a figure you mistyped on a
+ * brand-new account — there was never a true balance to preserve — and it is worth
+ * knowing that the app cannot afterwards say why the number is what it is.
+ *
+ * `workspaceId` is filtered on as well as `id`, matching every other write here.
+ */
+export async function updateAccount(
+  ctx: QueryContext,
+  input: { id: string; name: string; kind: AccountKind; openingBalance: string },
+) {
+  const { supabase, workspaceId } = ctx
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .update({ name: input.name, kind: input.kind, opening_balance: input.openingBalance })
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+    .select('id')
+    .single()
+
+  if (error) throw new Error(`Failed to update account: ${error.message}`)
+  return data
+}
+
+/** How many transactions point at an account. The guard on deleting one. */
+export async function countAccountTransactions(
+  ctx: QueryContext,
+  accountId: string,
+): Promise<number> {
+  const { supabase } = ctx
+  const { count, error } = await supabase
+    .from('transactions')
+    .select('id', { count: 'exact', head: true })
+    .eq('account_id', accountId)
+
+  if (error) throw new Error(`Failed to count transactions: ${error.message}`)
+  return count ?? 0
+}
+
+/**
+ * Delete an account, refusing one that has history.
+ *
+ * **The refusal is the point.** `transactions.account_id` is `on delete restrict`,
+ * so Postgres would reject it anyway — but a foreign-key error is not an
+ * explanation a person can act on. Counting first turns "something went wrong" into
+ * "this account has 14 transactions, so delete would take them with it".
+ *
+ * An empty account is a thing people create by accident, and an empty account is
+ * safe to remove. Anything with history is what `archiveAccount` is for.
+ */
+export async function deleteAccount(ctx: QueryContext, input: { id: string }) {
+  const { supabase, workspaceId } = ctx
+
+  const transactions = await countAccountTransactions(ctx, input.id)
+  if (transactions > 0) {
+    throw new Error(
+      `This account has ${transactions} transaction${transactions === 1 ? '' : 's'}, so it cannot be deleted. Archive it instead to keep the history.`,
+    )
+  }
+
+  const { error } = await supabase
+    .from('accounts')
+    .delete()
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+
+  if (error) throw new Error(`Failed to delete account: ${error.message}`)
+}
+
+/**
+ * Hide an account while keeping its history.
+ *
+ * The column has existed since the initial schema with nothing writing to it, which
+ * says the design expected archiving rather than deletion. It is also the only way
+ * to retire an account that has transactions — see `deleteAccount`.
+ */
+export async function archiveAccount(ctx: QueryContext, input: { id: string }) {
+  const { supabase, workspaceId } = ctx
+
+  const { error } = await supabase
+    .from('accounts')
+    .update({ is_archived: true })
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+
+  if (error) throw new Error(`Failed to archive account: ${error.message}`)
+}
+
+/**
+ * Rename a category.
+ *
+ * Transactions point at `category_id`, not at the name, so renaming is safe and
+ * every past transaction follows the new name. Same unique index as the create:
+ * (workspace, type, lower(name)).
+ */
+export async function updateCategory(
+  ctx: QueryContext,
+  input: { id: string; name: string; type: CategoryType },
+) {
+  const { supabase, workspaceId } = ctx
+
+  const { data, error } = await supabase
+    .from('categories')
+    .update({ name: input.name, type: input.type })
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+    .select('id')
+    .single()
+
+  if (error?.code === '23505') {
+    throw new Error(`You already have a ${input.type} category called "${input.name}".`)
+  }
+  if (error) throw new Error(`Failed to update category: ${error.message}`)
+  return data
+}
+
+/**
+ * Delete a category.
+ *
+ * **No guard, because the schema already made this safe.** `category_id` is
+ * `on delete set null`, so the transactions that used it survive as orphans rather
+ * than going with it — and Reports already renders those as "Uncategorised" rather
+ * than hiding them. Deleting a category therefore cannot lose a transaction, which
+ * is why it needs no count and no confirmation beyond saying what will happen.
+ */
+export async function deleteCategory(ctx: QueryContext, input: { id: string }) {
+  const { supabase, workspaceId } = ctx
+
+  const { error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+
+  if (error) throw new Error(`Failed to delete category: ${error.message}`)
+}
+
 export interface WorkspaceTotals {
   total_income: string | number
   total_expense: string | number

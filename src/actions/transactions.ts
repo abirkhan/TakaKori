@@ -8,6 +8,11 @@ import {
   createTransaction,
   deleteTransaction,
   updateTransaction,
+  updateAccount,
+  deleteAccount,
+  archiveAccount,
+  updateCategory,
+  deleteCategory,
 } from '@/lib/queries/server'
 import {
   accountKindSchema,
@@ -216,4 +221,155 @@ export async function createCategoryAction(
   revalidatePath('/dashboard')
   revalidatePath('/categories')
   return { success: 'Category created' }
+}
+
+/**
+ * Correcting an account.
+ *
+ * **The gap this closes is the one where a mistyped opening balance was permanent.**
+ * Creating an account was the only account write the app had: no update, no delete,
+ * no archive — so a number typed wrong on a brand-new account stayed wrong, with no
+ * way out of the UI. The columns have always been ordinary updatable columns, so
+ * this was missing code rather than a missing capability.
+ *
+ * `openingBalance` is **required** here, where it is optional on the create. That is
+ * deliberate: an edit that omitted it would write `'0.00'` over a real balance,
+ * because a patch is not a merge. Requiring the field means the form has to carry the
+ * figure it is editing, which is also the only way the user can see what they are
+ * about to overwrite.
+ */
+const updateAccountSchema = z.object({
+  id: z.string().uuid('That account no longer exists'),
+  name: z.string().trim().min(1, 'Name is required').max(80),
+  kind: accountKindSchema,
+  openingBalance: z
+    .string()
+    .trim()
+    .regex(/^-?\d*\.?\d{0,2}$/, 'Enter a valid amount'),
+})
+
+export async function updateAccountAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = updateAccountSchema.safeParse({
+    id: formData.get('id'),
+    name: formData.get('name'),
+    kind: formData.get('kind'),
+    openingBalance: formData.get('openingBalance'),
+  })
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    await updateAccount({
+      id: parsed.data.id,
+      name: parsed.data.name,
+      kind: parsed.data.kind,
+      openingBalance: parsed.data.openingBalance,
+    })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Could not save the account' }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/accounts')
+  return { success: 'Account saved' }
+}
+
+/**
+ * Delete or archive an account.
+ *
+ * `archive` is not a consolation prize — it is the only correct action for an
+ * account with history, since deleting would either fail on the foreign key or take
+ * the transactions with it. `deleteAccount` counts first and explains itself; this
+ * action passes that message straight through.
+ */
+export async function deleteAccountAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = uuidSchema.safeParse(formData.get('id'))
+  if (!parsed.success) return { error: 'That account no longer exists.' }
+
+  try {
+    if (formData.get('archive') === 'true') {
+      await archiveAccount({ id: parsed.data })
+    } else {
+      await deleteAccount({ id: parsed.data })
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Could not remove the account' }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/accounts')
+  return { success: formData.get('archive') === 'true' ? 'Account archived' : 'Account removed' }
+}
+
+const updateCategorySchema = z.object({
+  id: z.string().uuid('That category no longer exists'),
+  name: z.string().trim().min(1, 'Name is required').max(50),
+  type: categoryTypeSchema,
+})
+
+/**
+ * Rename a category.
+ *
+ * Transactions point at `category_id`, not at the name, so a rename carries every
+ * past transaction with it and nothing is orphaned — which is why this is safe and
+ * needs no warning about history.
+ */
+export async function updateCategoryAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = updateCategorySchema.safeParse({
+    id: formData.get('id'),
+    name: formData.get('name'),
+    type: formData.get('type'),
+  })
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  try {
+    await updateCategory({
+      id: parsed.data.id,
+      name: parsed.data.name,
+      type: parsed.data.type,
+    })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Could not save the category' }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/categories')
+  return { success: 'Category saved' }
+}
+
+/**
+ * Delete a category.
+ *
+ * Safe without a guard, because `category_id` is `on delete set null`: the
+ * transactions survive as orphans and Reports already shows those as
+ * "Uncategorised". The action says so rather than implying nothing is affected.
+ */
+export async function deleteCategoryAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = uuidSchema.safeParse(formData.get('id'))
+  if (!parsed.success) return { error: 'That category no longer exists.' }
+
+  try {
+    await deleteCategory({ id: parsed.data })
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Could not remove the category' }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/categories')
+  return { success: 'Category removed' }
 }

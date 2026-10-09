@@ -28,6 +28,11 @@ import {
   getWorkspaceTotals as getWorkspaceTotalsImpl,
   listAccounts as listAccountsImpl,
   listCategories as listCategoriesImpl,
+  updateAccount as updateAccountImpl,
+  deleteAccount as deleteAccountImpl,
+  archiveAccount as archiveAccountImpl,
+  updateCategory as updateCategoryImpl,
+  deleteCategory as deleteCategoryImpl,
 } from './reference'
 import {
   createTransaction as createTransactionImpl,
@@ -72,6 +77,33 @@ export const createAccount = async (input: {
 
 export const createCategory = async (input: { name: string; type: CategoryType }) =>
   createCategoryImpl(await serverContext(), input)
+
+/**
+ * The writes that did not exist when this module was written: correcting an account,
+ * removing or archiving one, and renaming or removing a category. Each resolves the
+ * context itself, exactly as the creates do — a caller cannot supply a workspace id.
+ */
+export const updateAccount = async (input: {
+  id: string
+  name: string
+  kind: AccountKind
+  openingBalance: string
+}) => updateAccountImpl(await serverContext(), input)
+
+export const deleteAccount = async (input: { id: string }) =>
+  deleteAccountImpl(await serverContext(), input)
+
+export const archiveAccount = async (input: { id: string }) =>
+  archiveAccountImpl(await serverContext(), input)
+
+export const updateCategory = async (input: {
+  id: string
+  name: string
+  type: CategoryType
+}) => updateCategoryImpl(await serverContext(), input)
+
+export const deleteCategory = async (input: { id: string }) =>
+  deleteCategoryImpl(await serverContext(), input)
 
 export const getTotalsForRange = async (range: { from: string; to: string }) =>
   getTotalsForRangeImpl(await serverContext(), range)
