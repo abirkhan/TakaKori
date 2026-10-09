@@ -94,6 +94,20 @@ export function AccountEditSheet({
 
   const formId = useId()
 
+  /**
+   * An archived account is closed, and the sheet says so rather than letting it be
+   * edited.
+   *
+   * **Disabled, not hidden.** Hiding the fields would leave a user who opened the wrong
+   * account with a sheet that had silently lost its content, and no way to tell an
+   * archive from a bug. Disabled controls with one line of explanation are legible; an
+   * empty form is not.
+   *
+   * The balance breakdown and the correction form stay available in neither state —
+   * see below for why the correction is closed too.
+   */
+  const archived = account.is_archived
+
   const adjustments = useQuery(keys.adjustments(account.id), () => listAdjustments(account.id))
 
   useWriteInvalidation(update.success, 'account', updateAttempt)
@@ -104,7 +118,10 @@ export function AccountEditSheet({
    * Renaming an account or archiving it used to give no confirmation at all.
    */
   useWriteToast(update, updateAttempt, 'Account updated.')
-  useWriteToast(remove, removeAttempt, 'Account removed.')
+  // The one toast that has to cover three outcomes, because the sheet closes on all
+  // three and the label afterwards is the only thing distinguishing "archived" from
+  // "restored" from "gone".
+  useWriteToast(remove, removeAttempt, 'Account removed.', 'Account restored')
   useWriteInvalidation(adjust.success, 'account', adjustAttempt)
 
   // Both close on success, so a rejection leaves the sheet open with the reason
@@ -120,17 +137,26 @@ export function AccountEditSheet({
     <Modal
       open={open}
       onClose={onClose}
-      title="Edit account"
-      description="Correct the name or type, or record a correction against the balance."
+      title={archived ? 'Archived account' : 'Edit account'}
+      description={
+        archived
+          ? 'This account is closed. Restore it to make changes or record corrections.'
+          : 'Correct the name or type, or record a correction against the balance.'
+      }
       footer={
         <>
           <button type="button" onClick={onClose} className={buttonClass('quiet')}>
-            Cancel
+            {archived ? 'Close' : 'Cancel'}
           </button>
+          {/*
+            Save is disabled rather than hidden while archived. A control that vanishes
+            reads as a bug, and the name and type are still shown so the user can read
+            what they are looking at — just not change it.
+          */}
           <button
             type="submit"
             form={formId}
-            disabled={updatePending}
+            disabled={updatePending || archived}
             className={buttonClass('primary')}
           >
             {updatePending ? 'Saving…' : 'Save changes'}
@@ -138,6 +164,15 @@ export function AccountEditSheet({
         </>
       }
     >
+      {archived && (
+        <div className="mb-4">
+          <Alert tone="info">
+            Archived accounts keep their transactions and their balance. They are hidden
+            from the account list and cannot be used on a new transaction.
+          </Alert>
+        </div>
+      )}
+
       <form id={formId} action={updateForm} className="flex flex-col gap-4">
         {update.error && <Alert tone="error">{update.error}</Alert>}
 
@@ -148,6 +183,7 @@ export function AccountEditSheet({
           label="Name"
           maxLength={80}
           required
+          disabled={archived}
           value={draft.name}
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
           error={update.fieldErrors?.name}
@@ -156,6 +192,7 @@ export function AccountEditSheet({
         <SelectField
           name="kind"
           label="Type"
+          disabled={archived}
           value={draft.kind}
           onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value }))}
         >
@@ -227,6 +264,7 @@ export function AccountEditSheet({
         error={adjust.error}
         fieldErrors={adjust.fieldErrors}
         createdId={adjust.createdId}
+        disabled={archived}
       />
 
       {/*
@@ -257,23 +295,31 @@ export function AccountEditSheet({
         {remove.error && <Alert tone="error">{remove.error}</Alert>}
 
         <div className="flex flex-wrap items-center gap-2">
+          {/*
+            Archive and restore are the same button in two states, not two buttons.
+
+            **Archiving was a one-way door.** A user who archived the wrong account had
+            no way back and had to ask for help. This is the exit, and it is the *first*
+            thing offered on an archived account — the state someone opened the sheet in
+            is almost always the state they want to leave.
+          */}
           <button
             type="submit"
-            name="archive"
+            name={archived ? 'unarchive' : 'archive'}
             value="true"
             disabled={removePending}
             /**
              * Full size, not `.tk-btn-sm`.
              *
-             * Both of these were 36px against the 48px minimum. They are destructive
-             * controls on financial records, which is the least forgiving place for a
-             * target you can miss — "Remove account" removes an account and everything
-             * filed against it. The design system allows a small button "where there is
-             * a reason"; density is not a reason for a control that deletes.
+             * These were 36px against the 48px minimum. They are destructive controls
+             * on financial records, which is the least forgiving place for a target you
+             * can miss — "Remove account" removes an account and everything filed
+             * against it. The design system allows a small button "where there is a
+             * reason"; density is not a reason for a control that deletes.
              */
-            className={buttonClass('quiet')}
+            className={archived ? buttonClass('primary') : buttonClass('quiet')}
           >
-            Archive instead
+            {archived ? 'Restore account' : 'Archive instead'}
           </button>
           <button
             type="submit"

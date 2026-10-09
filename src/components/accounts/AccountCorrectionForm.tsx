@@ -60,6 +60,7 @@ export function AccountCorrectionForm({
   error,
   fieldErrors,
   createdId,
+  disabled = false,
 }: {
   account: Account
   recorded: AccountAdjustment[]
@@ -69,6 +70,8 @@ export function AccountCorrectionForm({
   fieldErrors?: Record<string, string>
   /** Set only after a post that actually landed. */
   createdId?: string
+  /** An archived account is closed: its history is read, not edited. */
+  disabled?: boolean
 }) {
   const [draft, setDraft] = useState({ amount: '', reason: '' })
   /**
@@ -130,6 +133,7 @@ export function AccountCorrectionForm({
           label="Amount to add or subtract"
           inputMode="decimal"
           money
+          disabled={disabled}
           placeholder="e.g. 500 or -500"
           value={draft.amount}
           onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))}
@@ -141,6 +145,7 @@ export function AccountCorrectionForm({
           name="reason"
           label="Why (optional)"
           maxLength={200}
+          disabled={disabled}
           placeholder="e.g. Opening balance was entered twice"
           value={draft.reason}
           onChange={(e) => setDraft((d) => ({ ...d, reason: e.target.value }))}
@@ -151,7 +156,7 @@ export function AccountCorrectionForm({
           <button
             type="submit"
             form={formId}
-            disabled={pending}
+            disabled={pending || disabled}
             /**
              * Full size, not `.tk-btn-sm`.
              *
@@ -165,8 +170,9 @@ export function AccountCorrectionForm({
             {pending ? 'Recording…' : 'Record correction'}
           </button>
           <span className="tk-caption">
-            Recorded as its own entry, not as income or spending — your monthly totals do not
-            move.
+            {disabled
+              ? 'Restore the account to record a correction against it.'
+              : 'Recorded as its own entry, not as income or spending — your monthly totals do not move.'}
           </span>
         </div>
       </form>

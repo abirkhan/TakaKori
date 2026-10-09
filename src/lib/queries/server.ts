@@ -110,7 +110,7 @@ export const updateAccount = async (input: {
 export const deleteAccount = async (input: { id: string }) =>
   deleteAccountImpl(await serverContext(), input)
 
-export const archiveAccount = async (input: { id: string }) =>
+export const archiveAccount = async (input: { id: string; archived: boolean }) =>
   archiveAccountImpl(await serverContext(), input)
 
 export const updateCategory = async (input: {

@@ -297,12 +297,17 @@ export async function updateAccountAction(
 }
 
 /**
- * Delete or archive an account.
+ * Delete an account, archive it, or bring it back.
  *
  * `archive` is not a consolation prize — it is the only correct action for an
  * account with history, since deleting would either fail on the foreign key or take
  * the transactions with it. `deleteAccount` counts first and explains itself; this
  * action passes that message straight through.
+ *
+ * **Archiving is reversible, through this same action.** There was no way back from an
+ * archived account, which made archiving a one-way door: a user who archived the wrong
+ * account had to ask for help or clear their data. The third button this adds sends
+ * `unarchive`, and it is the only thing that sets it.
  */
 export async function deleteAccountAction(
   _prev: ActionState,
@@ -311,9 +316,14 @@ export async function deleteAccountAction(
   const parsed = uuidSchema.safeParse(formData.get('id'))
   if (!parsed.success) return { error: 'That account no longer exists.' }
 
+  const archive = formData.get('archive')
+  const unarchive = formData.get('unarchive')
+
   try {
-    if (formData.get('archive') === 'true') {
-      await archiveAccount({ id: parsed.data })
+    if (unarchive === 'true') {
+      await archiveAccount({ id: parsed.data, archived: false })
+    } else if (archive === 'true') {
+      await archiveAccount({ id: parsed.data, archived: true })
     } else {
       await deleteAccount({ id: parsed.data })
     }
@@ -323,7 +333,9 @@ export async function deleteAccountAction(
 
   revalidatePath('/dashboard')
   revalidatePath('/accounts')
-  return { success: formData.get('archive') === 'true' ? 'Account archived' : 'Account removed' }
+
+  if (unarchive === 'true') return { success: 'Account restored' }
+  return { success: archive === 'true' ? 'Account archived' : 'Account removed' }
 }
 
 const updateCategorySchema = z.object({

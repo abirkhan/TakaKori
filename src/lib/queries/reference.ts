@@ -277,22 +277,38 @@ export async function deleteAccount(ctx: QueryContext, input: { id: string }) {
 }
 
 /**
- * Hide an account while keeping its history.
+ * Hide an account while keeping its history, or bring it back.
  *
  * The column has existed since the initial schema with nothing writing to it, which
  * says the design expected archiving rather than deletion. It is also the only way
  * to retire an account that has transactions — see `deleteAccount`.
+ *
+ * **Archiving has to be reversible, or it is not an option, it is a trap.** An account
+ * archived by mistake — wrong account, wrong moment — had no way back. The user reported
+ * it from the edit sheet with nothing to act on, which is the same dead end as the
+ * queued-write one: a state the app can put you into and cannot take you out of.
+ *
+ * `archived` rather than a separate function, so the two cannot drift into disagreeing
+ * about what "toggling" means — and the button that calls it only ever sends one of the
+ * two, so there is no third state to represent.
  */
-export async function archiveAccount(ctx: QueryContext, input: { id: string }) {
+export async function archiveAccount(
+  ctx: QueryContext,
+  input: { id: string; archived: boolean },
+) {
   const { supabase, workspaceId } = ctx
 
   const { error } = await supabase
     .from('accounts')
-    .update({ is_archived: true })
+    .update({ is_archived: input.archived })
     .eq('id', input.id)
     .eq('workspace_id', workspaceId)
 
-  if (error) throw new Error(`Failed to archive account: ${error.message}`)
+  if (error) {
+    throw new Error(
+      `Failed to ${input.archived ? 'archive' : 'unarchive'} account: ${error.message}`,
+    )
+  }
 }
 
 /**
