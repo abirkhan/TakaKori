@@ -44,20 +44,20 @@ export function CategoryEditSheet({
   open: boolean
   onClose: () => void
 }) {
-  const [update, updateForm, updatePending] = useWriteAction<ActionState>(
+  const [update, updateForm, updatePending, updateAttempt] = useWriteAction<ActionState>(
     updateCategoryAction,
     {},
     { queueKind: 'category.update' },
   )
-  const [remove, removeForm, removePending] = useWriteAction<ActionState>(deleteCategoryAction, {})
+  const [remove, removeForm, removePending, removeAttempt] = useWriteAction<ActionState>(deleteCategoryAction, {})
 
   const [draft, setDraft] = useState({ name: category.name, type: category.type })
 
   const formId = useId()
   const removeFormId = useId()
 
-  useWriteInvalidation(update.success, 'category')
-  useWriteInvalidation(remove.success, 'category')
+  useWriteInvalidation(update.success, 'category', updateAttempt)
+  useWriteInvalidation(remove.success, 'category', removeAttempt)
 
   useEffect(() => {
     if (update.success && open) onClose()

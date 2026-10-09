@@ -48,13 +48,13 @@ export function EditTransactionSheet({
   open: boolean
   onClose: () => void
 }) {
-  const [state, formAction, pending] = useWriteAction<ActionState>(
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(
     updateTransactionAction,    {}, { queueKind: 'transaction.update' },
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
-  useWriteInvalidation(state.success, 'transaction')
+  useWriteInvalidation(state.success, 'transaction', attempt)
   // Seeded from the record once, at mount. `TransactionList` mounts this sheet
   // only while it is open, so every open is a fresh mount and an initializer is
   // enough. An effect that re-seeded on `open` would be setState-in-effect —

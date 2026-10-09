@@ -4,6 +4,8 @@ import { useEffect, useId, useState } from 'react'
 import { deleteAdjustmentAction } from '@/actions/transactions'
 import { Alert } from '@/components/ui/Alert'
 import { ConfirmDeleteSheet } from '@/components/ui/ConfirmDeleteSheet'
+import { Icon } from '@/components/ui/Icon'
+import { Row } from '@/components/ui/Row'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { notifySuccess } from '@/components/app/Toast'
@@ -69,7 +71,17 @@ export function AccountCorrectionForm({
   createdId?: string
 }) {
   const [draft, setDraft] = useState({ amount: '', reason: '' })
-  const [removing, setRemoving] = useState<AccountAdjustment | null>(null)
+  /**
+   * Two separate pieces of state, and they were one at first.
+   *
+   * `menuFor` is the correction whose actions sheet is open. `confirming` is the
+   * correction being deleted. Keying both off one field opened the confirmation
+   * *underneath* the actions sheet the moment the row's overflow button was tapped —
+   * two dialogs, the second behind the first's backdrop, with nothing in it clickable.
+   * The E2E test found it as a click timeout on a button it could see and could not
+   * reach, which is a confusing way to be told about a state bug.
+   */
+  const [confirming, setConfirming] = useState<AccountAdjustment | null>(null)
   const formId = useId()
 
   /**
@@ -140,7 +152,15 @@ export function AccountCorrectionForm({
             type="submit"
             form={formId}
             disabled={pending}
-            className={buttonClass('primary', { size: 'sm' })}
+            /**
+             * Full size, not `.tk-btn-sm`.
+             *
+             * `size: 'sm'` measured 36px against the 48px minimum tap target, and this
+             * is the button that moves money. The size is the one thing the design system
+             * will not negotiate on for a control with that consequence — and it cost
+             * nothing here, because this button is the only one on its line.
+             */
+            className={buttonClass('primary')}
           >
             {pending ? 'Recording…' : 'Record correction'}
           </button>
@@ -159,72 +179,96 @@ export function AccountCorrectionForm({
       {recorded.length > 0 && (
         <div className="mt-5 flex flex-col gap-2">
           <h4 className="tk-label">Recorded corrections</h4>
-          <ul className="tk-card-flat flex flex-col gap-3">
-            {recorded.map((a) => (
-              <li key={a.id} className="flex items-baseline justify-between gap-3">
-                <span className="tk-caption min-w-0">
-                  {a.reason ?? 'No reason given'}
-                  {/* The date, because a correction with no date is as
-                      unattributable as an opening balance with no entry behind it. */}
-                  <span className="block">{new Date(a.created_at).toLocaleDateString()}</span>
-                </span>
-                {/*
-                  Neutral, and not signed with a `+`. An adjustment is neither income nor
-                  expense, and colouring it as either would be precisely the misreading
-                  the separate table exists to prevent. The minus, where there is one,
-                  carries the direction on its own.
-                */}
-                <span className="tk-amount shrink-0">{formatMinor(toMinor(a.amount), { currency })}</span>
-                {/*
-                  One action target, and it is destructive, so it goes through the same
-                  confirmation every other delete in the app does.
+          {/*
+            `Row` rather than a hand-written `<li>`, for two reasons that were both
+            found by measuring rather than by reading.
 
-                  This exists because the alternative was a correction the user could
-                  make but not take back. A correction exists to fix a mistake, and a fix
-                  for a mistake that cannot itself be undone is a worse position than
-                  the silent column edit it replaced — that one at least could be
-                  re-typed. Found the hard way: the E2E suite recorded corrections to
-                  test them and had no way to remove them, so every run left the shared
-                  test account's balance permanently further off. That is what a missing
-                  undo looks like from the outside.
-                */}
-                <button
-                  type="button"
-                  onClick={() => setRemoving(a)}
-                  className={buttonClass('quiet', { size: 'sm' })}
+            **The hand-rolled row's button measured 36px tall.** `.tk-btn-sm` is 2.25rem,
+            and brand-design rule 6 holds the minimum tap target at 48px. Rule 6 does
+            allow `.tk-btn-sm` "where there is a reason", and the one documented reason
+            is the square icon button — but a destructive control in a financial record
+            is not that case, and a 36px target for "remove this correction" is a
+            mis-tap on exactly the action that cannot be undone. The row is allowed to be
+            taller for it.
+
+            **`Row` separates `trailing` from `actions`.** The amount went in `trailing`
+            and the button in `actions` because mixing them would make "read the amount"
+            and "click the menu" the same target — and `trailing` is what the tests
+            locate by `[data-row-trailing]`. A flex row with three siblings in a 248px
+            sheet had no such separation, and nothing about it said which was which.
+          */}
+          <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
+            {recorded.map((a) => (
+              <li key={a.id}>
+                <Row
+                  tone="sky"
+                  title={a.reason ?? 'No reason given'}
+                  subtitle={new Date(a.created_at).toLocaleDateString()}
                   /**
-                   * The amount, not the reason.
-                   *
-                   * Reasons repeat — the same user correcting the same kind of mistake
-                   * twice produces two identical labels — and two identically-named
-                   * controls in one list is both an accessibility fault and a test's
-                   * only way to tell rows apart. The amount is also the thing that makes
-                   * the label say what is about to be removed.
+                   * Neutral, and not signed with a `+`. An adjustment is neither income
+                   * nor expense, and colouring it as either would be precisely the
+                   * misreading the separate table exists to prevent. The minus, where
+                   * there is one, carries the direction on its own.
                    */
-                  aria-label={`Remove the correction of ${formatMinor(toMinor(a.amount), { currency })}`}
-                >
-                  Remove
-                </button>
+                  trailing={
+                    <span className="tk-amount">{formatMinor(toMinor(a.amount), { currency })}</span>
+                  }
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(a)}
+                      className="tk-btn-icon"
+                      /**
+                       * The amount, not the reason.
+                       *
+                       * Reasons repeat — the same user correcting the same kind of
+                       * mistake twice produces two identical labels — and two
+                       * identically-named controls in one list is both an
+                       * accessibility fault and a test's only way to tell rows apart. The
+                       * amount is also what makes the label say what is being removed.
+                       */
+                      aria-label={`Remove the correction of ${formatMinor(toMinor(a.amount), { currency })}`}
+                    >
+                      <Icon name="trash" size={18} />
+                    </button>
+                  }
+                />
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {removing && (
+      {/*
+        Two taps from the list to a deleted row: the row's trash button, then the
+        confirmation. Nothing between them.
+
+        **There was a `RowActionsSheet` here, and it was removed.** The reasoning for
+        adding it was sound — `TransactionList` routes its delete through one, and
+        matching that is what makes a user who has just deleted a transaction know what
+        happens next. But `RowActionsSheet` exists to *choose between* actions, and this
+        row has exactly one. Wrapping a single button in a sheet is a tap that decides
+        nothing, and it was a third `<dialog>` inside a dialog that was already open:
+        the sheet never settled, and the button in it was reported as permanently
+        "not stable" for 45 seconds — visible, reachable, and untappable.
+
+        `tk-btn-icon` is 44px rather than 48, which is the documented exemption: it is
+        the one-target-per-row trade, and the confirmation behind it is the friction.
+      */}
+      {confirming && (
         <ConfirmDeleteSheet
           open
-          onClose={() => setRemoving(null)}
+          onClose={() => setConfirming(null)}
           title="Remove this correction?"
           description="The balance goes back to what it was without it. Nothing else changes."
           action={deleteAdjustmentAction}
           kind="account"
-          hidden={{ id: removing.id }}
+          hidden={{ id: confirming.id }}
           confirmLabel="Remove the correction"
           savedMessage="Correction removed."
         >
           <p className="tk-money">
-            {formatMinor(toMinor(removing.amount), { currency })}
+            {formatMinor(toMinor(confirming.amount), { currency })}
           </p>
         </ConfirmDeleteSheet>
       )}

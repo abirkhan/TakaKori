@@ -256,7 +256,7 @@ export function AddTransactionSheet({
   open: boolean
   onClose: () => void
 }) {
-  const [state, formAction, pending] = useWriteAction<ActionState>(
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(
     createTransactionAction,
     {},
     // The one write that is queueable today. Offline, this stores the transaction on
@@ -281,7 +281,7 @@ export function AddTransactionSheet({
   // so there is nothing new to read — invalidating would drop a cached list and
   // immediately fail to refill it, leaving the user looking at a worse screen than
   // the one they already had. The row appears when the drain succeeds.
-  useWriteInvalidation(state.queued ? undefined : state.success, 'transaction')
+  useWriteInvalidation(state.queued ? undefined : state.success, 'transaction', attempt)
 
   return (
     <Modal

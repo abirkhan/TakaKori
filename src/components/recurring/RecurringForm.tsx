@@ -41,14 +41,14 @@ export function RecurringForm({
   categories: Category[]
   today: string
 }) {
-  const [state, formAction, pending] = useWriteAction<ActionState>(
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(
     createRecurringAction,
     {},
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
-  useWriteInvalidation(state.success, 'recurring')
+  useWriteInvalidation(state.success, 'recurring', attempt)
   const [type, setType] = useState<'income' | 'expense'>('expense')
 
   const visibleCategories = categories.filter((c) => c.type === type)

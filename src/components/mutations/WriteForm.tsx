@@ -87,7 +87,7 @@ export function WriteForm({
 }) {
   const [state, formAction, pending, attempt] = useWriteAction<ActionState>(action, {}, { queueKind })
 
-  useWriteInvalidation(state.success, kind)
+  useWriteInvalidation(state.success, kind, attempt)
 
   /**
    * Success and non-field errors are toast; field errors stay on the form.

@@ -76,12 +76,12 @@ export function ConfirmDeleteSheet({
   children?: ReactNode
 }) {
   /** `useMemo` because the action is a prop; see the note in `WriteForm`. */
-const [state, formAction] = useWriteAction<ActionState>(action, {}, { queueKind })
+const [state, formAction, , attempt] = useWriteAction<ActionState>(action, {}, { queueKind })
 
   // Clears the cache at the moment of the write. Without it a deleted
   // transaction leaves its own amount in the total balance until a hard reload.
   // Skipped for a queued delete, because nothing has reached the database yet.
-  useWriteInvalidation(state.queued ? undefined : state.success, kind)
+  useWriteInvalidation(state.queued ? undefined : state.success, kind, attempt)
 
   /**
    * Success toasts; failure does not, and that is not an oversight.

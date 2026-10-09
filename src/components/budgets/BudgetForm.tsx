@@ -9,11 +9,11 @@ import { buttonClass } from '@/components/ui/button'
 import { useWriteAction } from '@/lib/client/useWriteAction'
 
 export function BudgetForm({ categories }: { categories: Category[] }) {
-  const [state, formAction, pending] = useWriteAction<ActionState>(createBudgetAction, {}, { queueKind: 'budget.create' })
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(createBudgetAction, {}, { queueKind: 'budget.create' })
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
-  useWriteInvalidation(state.success, 'budget')
+  useWriteInvalidation(state.success, 'budget', attempt)
 
   const expenseCategories = categories.filter((c) => c.type === 'expense')
 

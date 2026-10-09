@@ -80,13 +80,13 @@ function AccountFields({
  * adding an account that already exists rather than opening a new one.
  */
 export function AccountForm() {
-  const [state, formAction, pending] = useWriteAction<ActionState>(
+  const [state, formAction, pending, attempt] = useWriteAction<ActionState>(
     createAccountAction,    {}, { queueKind: 'account.create' },
   )
 
   // A Server Action's revalidatePath cannot reach the browser's cache, so without
   // this the dashboard keeps showing the figure from before the write.
-  useWriteInvalidation(state.success, 'account')
+  useWriteInvalidation(state.success, 'account', attempt)
   const { open, close } = useUrlSheet('account')
   const formId = useId()
 

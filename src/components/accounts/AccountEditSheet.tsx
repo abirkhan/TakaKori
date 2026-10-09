@@ -75,13 +75,13 @@ export function AccountEditSheet({
   open: boolean
   onClose: () => void
 }) {
-  const [update, updateForm, updatePending] = useWriteAction<ActionState>(
+  const [update, updateForm, updatePending, updateAttempt] = useWriteAction<ActionState>(
     updateAccountAction,
     {},
     { queueKind: 'account.update' },
   )
-  const [remove, removeForm, removePending] = useWriteAction<ActionState>(deleteAccountAction, {})
-  const [adjust, adjustForm, adjustPending] = useWriteAction<ActionState>(
+  const [remove, removeForm, removePending, removeAttempt] = useWriteAction<ActionState>(deleteAccountAction, {})
+  const [adjust, adjustForm, adjustPending, adjustAttempt] = useWriteAction<ActionState>(
     createAdjustmentAction,
     {},
   )
@@ -96,9 +96,9 @@ export function AccountEditSheet({
 
   const adjustments = useQuery(keys.adjustments(account.id), () => listAdjustments(account.id))
 
-  useWriteInvalidation(update.success, 'account')
-  useWriteInvalidation(remove.success, 'account')
-  useWriteInvalidation(adjust.success, 'account')
+  useWriteInvalidation(update.success, 'account', updateAttempt)
+  useWriteInvalidation(remove.success, 'account', removeAttempt)
+  useWriteInvalidation(adjust.success, 'account', adjustAttempt)
 
   // Both close on success, so a rejection leaves the sheet open with the reason
   // beside the field that caused it.
@@ -244,7 +244,16 @@ export function AccountEditSheet({
             name="archive"
             value="true"
             disabled={removePending}
-            className={buttonClass('quiet', { size: 'sm' })}
+            /**
+             * Full size, not `.tk-btn-sm`.
+             *
+             * Both of these were 36px against the 48px minimum. They are destructive
+             * controls on financial records, which is the least forgiving place for a
+             * target you can miss — "Remove account" removes an account and everything
+             * filed against it. The design system allows a small button "where there is
+             * a reason"; density is not a reason for a control that deletes.
+             */
+            className={buttonClass('quiet')}
           >
             Archive instead
           </button>
@@ -252,7 +261,7 @@ export function AccountEditSheet({
             type="submit"
             form={removeFormId}
             disabled={removePending}
-            className={buttonClass('quiet', { size: 'sm' })}
+            className={buttonClass('quiet')}
           >
             Remove account
           </button>

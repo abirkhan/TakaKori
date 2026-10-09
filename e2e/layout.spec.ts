@@ -1,3 +1,4 @@
+import { clearTestCorrections } from './corrections-data'
 /**
  * Layout regression guard.
  *
@@ -121,6 +122,78 @@ test.describe('layout — narrow phones', () => {
       }
     })
   }
+
+  /**
+   * Tap targets in the account correction sheet are at least 48px on their short side.
+   *
+   * This exists because a per-row "Remove correction" button shipped at **36px** and
+   * nothing caught it — not the design rules, which allow `.tk-btn-sm` "where there is
+   * a reason", not lint, and not the gate. It was found by measuring a button nobody
+   * had thought to look at. A rule enforced only by whoever happens to remember it is
+   * not a rule.
+   *
+   * **Scoped to this sheet deliberately, and that scoping is a known gap rather than a
+   * claim.** Run against the whole app this test also fails on the app bar: the skip
+   * link at 36px, the home link at 34px, sign out at 36px, the FAB at 36px and the CSV
+   * export at 36px. Those are pre-existing and out of scope here, because widening five
+   * header controls is a visual change to every screen and at 320px risks the very
+   * horizontal overflow rule 8 exists to prevent — it wants its own decision, not to
+   * ride along with a delete button.
+   *
+   * `.tk-btn-icon` (44px) is exempt and that is the one-target-per-row trade
+   * `RowActionsSheet` exists to make. The exemption is a class, not a threshold: a
+   * threshold would quietly pass any new 44px control.
+   */
+  test('the correction sheet has no tap target under 48px', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 780 })
+    await page.goto('/login')
+    await page.locator('[name="email"]').fill(EMAIL!)
+    await page.locator('[name="password"]').fill(PASSWORD!)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL('**/dashboard', { timeout: 30_000 })
+
+    await page.goto('/accounts', { waitUntil: 'networkidle' })
+    // Self-heal first: the corrections spec shares this account, and a row left behind
+    // by an earlier run would be measured here as if it were part of this screen.
+    await clearTestCorrections(page)
+    await page.goto('/accounts', { waitUntil: 'networkidle' })
+    await page.locator('[aria-label^="Edit "]').first().click()
+    const sheet = page.getByRole('dialog')
+    await sheet.locator('[data-breakdown="total"] .tk-money').waitFor({ timeout: 15_000 })
+
+    // Record one, because the row controls only exist once there is something to act on.
+    await sheet.locator('[name="amount"]').fill('-12.50')
+    await sheet.locator('[name="reason"]').fill('Tap target check')
+    await sheet.getByRole('button', { name: 'Record correction' }).click()
+    await sheet.locator('button[aria-label^="Remove the correction of"]').first().waitFor({
+      timeout: 15_000,
+    })
+
+    const tooSmall = await page.evaluate(() => {
+      const EXEMPT = new Set(['tk-btn-icon', 'tk-toast-close'])
+      const bad: string[] = []
+      for (const el of Array.from(
+        document.querySelectorAll('.tk-modal-body button, .tk-modal-body a[href]'),
+      )) {
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if ([...el.classList].some((c) => EXEMPT.has(c))) continue
+        const label = el.getAttribute('aria-label') ?? (el.textContent ?? '').trim().slice(0, 24)
+        const short = Math.min(r.width, r.height)
+        if (short < 48) bad.push(`${label || el.tagName}=${Math.round(short)}px`)
+      }
+      return bad
+    })
+
+    expect(tooSmall, `correction sheet has targets under 48px: ${tooSmall.join(', ')}`).toEqual([])
+
+    // Clean up, or the shared account keeps this correction.
+    await sheet.locator('button[aria-label^="Remove the correction of"]').first().click()
+    await page.getByRole('button', { name: 'Remove the correction', exact: true }).click({ force: true })
+    await expect(sheet.locator('button[aria-label^="Remove the correction of"]')).toHaveCount(0, {
+      timeout: 15_000,
+    })
+  })
 
   test('no field is small enough to trigger iOS auto-zoom', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 780 })
