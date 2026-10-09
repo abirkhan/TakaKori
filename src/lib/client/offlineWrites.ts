@@ -59,7 +59,17 @@ const COLUMNS: Record<string, Record<string, string>> = {
   },
   'transaction.delete': { id: 'id' },
   'account.create': { name: 'name', kind: 'kind', openingBalance: 'opening_balance' },
+  // `openingBalance` is **required** on the Server Action, and this is why: a patch
+  // is not a merge. Omitting it would write '0.00' over a real balance, and a queued
+  // edit carrying no balance would do that silently, on a device nobody is watching.
+  'account.update': {
+    id: 'id',
+    name: 'name',
+    kind: 'kind',
+    openingBalance: 'opening_balance',
+  },
   'category.create': { name: 'name', type: 'type' },
+  'category.update': { id: 'id', name: 'name', type: 'type' },
   'budget.create': { amount: 'amount', categoryId: 'category_id' },
   'budget.delete': { id: 'id' },
   'recurring.delete': { id: 'id' },

@@ -117,6 +117,8 @@ const CREATE_TABLES: Record<string, string> = {
 /** The one edit the app offers today. Same table as the create. */
 const UPDATE_TABLES: Record<string, string> = {
   'transaction.update': 'transactions',
+  'account.update': 'accounts',
+  'category.update': 'categories',
 }
 
 /**

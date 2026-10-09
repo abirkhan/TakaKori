@@ -8,6 +8,10 @@ import { CategoryForm } from '@/components/categories/CategoryForm'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { CategoryEditSheet } from '@/components/categories/CategoryEditSheet'
+import { buttonClass } from '@/components/ui/button'
+import type { Category } from '@/lib/queries/reference'
+import { useState } from 'react'
 
 /**
  * Categories, loaded in the browser.
@@ -27,6 +31,7 @@ import { Icon, type IconName } from '@/components/ui/Icon'
  */
 export function CategoryData() {
   const categories = useQuery(keys.categories(), () => listCategories())
+  const [editing, setEditing] = useState<string | null>(null)
 
   const data = categories.data
   const income = data?.filter((c) => c.type === 'income') ?? []
@@ -90,12 +95,37 @@ export function CategoryData() {
                     </span>
                     <p className="tk-body w-full truncate font-medium">{c.name}</p>
                     {c.is_system && <p className="tk-caption">Built in</p>}
+                    {/*
+                      A rename is the commonest correction on this screen, and before
+                      this there was no way to make one: a category created with the
+                      wrong name kept it, and transactions follow `category_id`, so
+                      every past row showed the wrong label too. Built-in categories
+                      are left alone - they are seeded, so renaming one would be undone
+                      by the next seed and the user cannot know that.
+                    */}
+                    {!c.is_system && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(c.id)}
+                        className={buttonClass('quiet', { size: 'sm' })}
+                      >
+                        Edit
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
           </section>
         ))}
+
+        {editing && categories.data && (
+          <CategoryEditSheet
+            category={categories.data.find((c) => c.id === editing) as Category}
+            open
+            onClose={() => setEditing(null)}
+          />
+        )}
     </>
   )
 }

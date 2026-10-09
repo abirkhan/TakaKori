@@ -8,6 +8,10 @@ import { StatTile } from '@/components/ui/StatTile'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Row } from '@/components/ui/Row'
 import { Icon, iconForAccountKind } from '@/components/ui/Icon'
+import { AccountEditSheet } from '@/components/accounts/AccountEditSheet'
+import { buttonClass } from '@/components/ui/button'
+import type { Account } from '@/lib/queries/reference'
+import { useState } from 'react'
 
 /**
  * The balances on the Account screen, loaded in the browser.
@@ -80,6 +84,7 @@ export function AccountTotals() {
 
 export function AccountBalances() {
   const { accounts, balances } = useBalances()
+  const [editing, setEditing] = useState<string | null>(null)
 
   return (
     <section>
@@ -132,8 +137,21 @@ export function AccountBalances() {
                       </>
                     }
                     trailing={
-                      <span className={toMinor(balance) < 0 ? 'tk-amount tk-expense' : 'tk-amount'}>
-                        {formatMinor(toMinor(balance))}
+                      // The amount, and the way out of a mistake. Before this, an
+                      // account created with the wrong opening balance was permanent:
+                      // there was no update anywhere in the app.
+                      <span className="flex items-center gap-2">
+                        <span className={toMinor(balance) < 0 ? 'tk-amount tk-expense' : 'tk-amount'}>
+                          {formatMinor(toMinor(balance))}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(a.id)}
+                          className={buttonClass('quiet', { size: 'sm' })}
+                          aria-label={`Edit ${a.name}`}
+                        >
+                          Edit
+                        </button>
                       </span>
                     }
                   />
@@ -141,6 +159,14 @@ export function AccountBalances() {
               )
             })}
           </ul>
+
+          {editing && (
+            <AccountEditSheet
+              account={accounts.data.find((a) => a.id === editing) as Account}
+              open
+              onClose={() => setEditing(null)}
+            />
+          )}
 
           <p className="tk-caption mt-3">
             Balances include transfers in both directions. Moving money between your own accounts is
