@@ -118,10 +118,13 @@ export function AccountEditSheet({
    * Renaming an account or archiving it used to give no confirmation at all.
    */
   useWriteToast(update, updateAttempt, 'Account updated.')
-  // The one toast that has to cover three outcomes, because the sheet closes on all
-  // three and the label afterwards is the only thing distinguishing "archived" from
-  // "restored" from "gone".
-  useWriteToast(remove, removeAttempt, 'Account removed.', 'Account restored')
+  /**
+   * No message passed, so the action's own wording is used: "Account archived",
+   * "Account restored" or "Account removed", whichever happened. All three close this
+   * sheet, so the toast is the only thing left standing to tell them apart — and
+   * restating them here is exactly how the wrong one got wired up before.
+   */
+  useWriteToast(remove, removeAttempt)
   useWriteInvalidation(adjust.success, 'account', adjustAttempt)
 
   // Both close on success, so a rejection leaves the sheet open with the reason

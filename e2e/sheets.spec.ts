@@ -366,6 +366,7 @@ authedTest('an account can be archived and restored from its sheet', async ({ si
     await sheet.getByRole('button', { name: 'Archive instead' }).click()
 
     await expect(sheet).toBeHidden({ timeout: 20_000 })
+    await expect(signedIn.getByText('Account archived')).toBeVisible({ timeout: 15_000 })
     // Archived, not deleted: the row is still there and now says so. Scoped to this
     // row, because an earlier run may have left another account archived and a
     // page-wide `getByText('archived')` matches both.
@@ -397,6 +398,20 @@ authedTest('an account can be archived and restored from its sheet', async ({ si
     // account almost always wants.
     await restored.getByRole('button', { name: 'Restore account' }).click()
     await expect(restored).toBeHidden({ timeout: 20_000 })
+
+    /**
+     * The wording, which is the thing that was wrong.
+     *
+     * All three outcomes close this sheet, so the toast is the only thing left standing
+     * to tell "archived" from "restored" from "removed". It was reporting "Account
+     * removed" for an archive and "Saved on this device" for a restore, because a fourth
+     * argument was read as a second success message when it is the offline wording.
+     *
+     * Asserted explicitly rather than by screenshot: a toast has gone by the time an
+     * assertion retries a failure, so the wrong wording was invisible to every visual
+     * check and to the green gate.
+     */
+    await expect(signedIn.getByText('Account restored')).toBeVisible({ timeout: 15_000 })
 
     // Back in the live list, no longer marked archived.
     const live = signedIn.locator('li').filter({ hasText: name }).first()
