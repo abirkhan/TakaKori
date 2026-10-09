@@ -1,4 +1,4 @@
-import { clearTestCorrections } from './corrections-data'
+import { clearTestCorrections, openAccountSheet } from './corrections-data'
 /**
  * Layout regression guard.
  *
@@ -17,6 +17,10 @@ import { clearTestCorrections } from './corrections-data'
  *   3. No field computes under 16px, which is what iOS zooms on.
  *   4. `env(safe-area-inset-bottom)` is honoured by the nav, so the home
  *      indicator does not cover a tab label in standalone/PWA mode.
+ *
+ * And separately, on every route: **the last thing on the page clears the bar.**
+ * Item 2 is about the bar's own geometry and cannot fail while the bar covers a
+ * list, which is why that needed its own test.
  */
 import { test, expect, authedTest } from './fixtures'
 import { config as loadEnv } from 'dotenv'
@@ -156,10 +160,11 @@ test.describe('layout — narrow phones', () => {
     // Self-heal first: the corrections spec shares this account, and a row left behind
     // by an earlier run would be measured here as if it were part of this screen.
     await clearTestCorrections(page)
-    await page.goto('/accounts', { waitUntil: 'networkidle' })
-    await page.locator('[aria-label^="Edit "]').first().click()
-    const sheet = page.getByRole('dialog')
-    await sheet.locator('[data-breakdown="total"] .tk-money').waitFor({ timeout: 15_000 })
+    await clearTestCorrections(page)
+    // Via the shared helper, which picks an account that is not archived. An archived
+    // account's sheet disables the correction form - correct behaviour, and a fill()
+    // timeout here that points at the layout rule rather than at the leftover state.
+    const sheet = await openAccountSheet(page)
 
     // Record one, because the row controls only exist once there is something to act on.
     await sheet.locator('[name="amount"]').fill('-12.50')
@@ -219,6 +224,92 @@ test.describe('layout — narrow phones', () => {
       })
 
       expect(tooSmall, `${route} has fields under 16px: ${tooSmall.join(', ')}`).toEqual([])
+    }
+  })
+
+  /**
+   * The bar does not cover the content.
+   *
+   * **This is the assertion that was missing, and its absence is why a real
+   * regression reached review described as obvious.** The existing test checked the
+   * bar's own geometry — that it fits the viewport, that its labels are on screen,
+   * that the safe-area padding is applied — and every one of those can pass while the
+   * bar sits on top of a list. The bar being *correct* is not the same claim as the
+   * content being *reachable*.
+   *
+   * The test that did find the original defect measured focusable elements under the
+   * bar (ADR-031, 113 of them on a 390×844 screen) and it was deleted when the bar
+   * and `main`'s clearance became one declaration. That made sense as a
+   * simplification, and it left the guarantee it was protecting unenforced — so this
+   * is it again, kept deliberately small: no magic numbers, no re-derivation of the
+   * bar's position, just "is anything there" at the bottom of every screen.
+   *
+   * **Scrolled to the bottom, and on every route.** A bar that overlaps mid-scroll
+   * is doing its job — content passes behind a fixed bar, that is what fixed means.
+   * The failure is only when the *last* thing on the page cannot be reached, so the
+   * measurement is taken at maximum scroll where the clearance has to be permanent.
+   */
+  test('the last thing on every screen clears the tab bar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 780 })
+    await page.goto('/login')
+    await page.locator('[name="email"]').fill(EMAIL!)
+    await page.locator('[name="password"]').fill(PASSWORD!)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL('**/dashboard', { timeout: 30_000 })
+
+    for (const route of AUTHED_ROUTES) {
+      await page.goto(route, { waitUntil: 'networkidle' })
+      // Wait for the client's own data, not for the shell. A measurement taken
+      // against three "Loading…" rows passes trivially, because a loading list is
+      // short enough to clear anything.
+      await page.waitForFunction(
+        () => !document.getElementById('main')?.innerText.includes('Loading…'),
+        undefined,
+        { timeout: 20_000 },
+      )
+
+      const result = await page.evaluate(() => {
+        const html = document.documentElement
+        // `html` sets `scroll-behavior: smooth`, so a bare scrollTo animates and two
+        // frames later the page has moved ~2px of several thousand. The measurement
+        // then runs mid-scroll and passes or fails for the wrong reason.
+        const previous = html.style.scrollBehavior
+        html.style.scrollBehavior = 'auto'
+        window.scrollTo(0, 999_999)
+
+        const nav = document.querySelector('nav[aria-label="Primary"]')
+        const fab = document.querySelector('.tk-fab')
+        if (!nav || !fab) {
+          html.style.scrollBehavior = previous
+          return { error: 'no tab bar' }
+        }
+
+        const navBox = nav.getBoundingClientRect()
+        const fabBox = fab.getBoundingClientRect()
+        // The FAB sits above the bar's top edge by design, so the band that could
+        // cover content starts at whichever is higher.
+        const bandTop = Math.min(navBox.top, fabBox.top)
+
+        const covered: string[] = []
+        for (const el of document.querySelectorAll('#main a[href], #main button, #main input, #main select, #main textarea, #main li')) {
+          const style = getComputedStyle(el)
+          if (style.display === 'none' || style.visibility === 'hidden') continue
+          const b = el.getBoundingClientRect()
+          if (b.width === 0 || b.height === 0) continue
+          if (b.bottom > bandTop && b.top < navBox.bottom && b.right > navBox.left && b.left < navBox.right) {
+            covered.push((el.getAttribute('aria-label') ?? el.textContent ?? el.tagName).trim().replace(/\s+/g, ' ').slice(0, 30))
+          }
+        }
+
+        const clearance = document.getElementById('main')?.getBoundingClientRect().bottom ?? 0
+        html.style.scrollBehavior = previous
+        return { covered, mainBottom: Math.round(clearance), bandTop: Math.round(bandTop) }
+      })
+
+      expect(
+        (result as { covered?: string[] }).covered ?? ['no tab bar'],
+        `${route} has content under the tab bar at full scroll`,
+      ).toEqual([])
     }
   })
 
@@ -319,3 +410,4 @@ test.describe('app bar', () => {
     }
   })
 })
+

@@ -23,12 +23,31 @@ const OURS = [
   'Tap target check',
 ]
 
-/** Open the account sheet and wait for the breakdown, so rows are rendered. */
+/**
+ * Open the account sheet and wait for the breakdown, so rows are rendered.
+ *
+ * **Picks an account that is not archived.** An archived account's edit sheet disables
+ * the name, the type and the correction form — which is the behaviour we want, and which
+ * makes `fill()` on the amount time out. These tests record corrections, so they need a
+ * live account. Taking the first row blindly meant an account archived by any earlier
+ * run made all six of them fail, pointing at the correction feature rather than at the
+ * leftover state.
+ */
 export async function openAccountSheet(page: Page) {
   await page.goto('/accounts')
-  const first = page.locator('[aria-label^="Edit "]').first()
-  await first.waitFor({ timeout: 20_000 })
-  await first.click()
+  const rows = page.locator('li').filter({ has: page.locator('[aria-label^="Edit "]') })
+  await rows.first().waitFor({ timeout: 20_000 })
+
+  let button = rows.first().locator('[aria-label^="Edit "]')
+  for (let i = 0; i < (await rows.count()); i++) {
+    const row = rows.nth(i)
+    if ((await row.getByText('archived').count()) === 0) {
+      button = row.locator('[aria-label^="Edit "]')
+      break
+    }
+  }
+
+  await button.click()
   const sheet = page.getByRole('dialog')
   await expect(sheet).toBeVisible()
   // The corrections list only renders once the reads land, and reading it early yields a
