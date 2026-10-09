@@ -33,6 +33,9 @@ import {
   archiveAccount as archiveAccountImpl,
   updateCategory as updateCategoryImpl,
   deleteCategory as deleteCategoryImpl,
+  createAdjustment as createAdjustmentImpl,
+  deleteAdjustment as deleteAdjustmentImpl,
+  listAdjustments as listAdjustmentsImpl,
 } from './reference'
 import {
   createTransaction as createTransactionImpl,
@@ -77,6 +80,19 @@ export const createAccount = async (input: {
 
 export const createCategory = async (input: { name: string; type: CategoryType }) =>
   createCategoryImpl(await serverContext(), input)
+
+/** Balance corrections. See ADR-045 and `account_adjustments`. */
+export const createAdjustment = async (input: {
+  accountId: string
+  amount: string
+  reason?: string
+}) => createAdjustmentImpl(await serverContext(), input)
+
+export const deleteAdjustment = async (input: { id: string }) =>
+  deleteAdjustmentImpl(await serverContext(), input)
+
+export const listAdjustments = async (accountId?: string) =>
+  listAdjustmentsImpl(await serverContext(), accountId)
 
 /**
  * The writes that did not exist when this module was written: correcting an account,

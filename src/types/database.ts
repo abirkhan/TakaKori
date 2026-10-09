@@ -56,6 +56,34 @@ export type Database = {
         Relationships: []
       }
 
+      account_adjustments: {
+        Row: {
+          id: string
+          workspace_id: string
+          account_id: string
+          amount: number
+          reason: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workspace_id: string
+          account_id: string
+          amount: number
+          reason?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workspace_id?: string
+          account_id?: string
+          amount?: number
+          reason?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+
       categories: {
         Row: {
           id: string

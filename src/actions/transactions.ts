@@ -13,6 +13,8 @@ import {
   archiveAccount,
   updateCategory,
   deleteCategory,
+  createAdjustment,
+  deleteAdjustment,
 } from '@/lib/queries/server'
 import {
   accountKindSchema,
@@ -372,4 +374,81 @@ export async function deleteCategoryAction(
   revalidatePath('/dashboard')
   revalidatePath('/categories')
   return { success: 'Category removed' }
+}
+
+/**
+ * Record a balance correction.
+ *
+ * **Signed on purpose, and that is the whole interface.** The user is stating what
+ * the balance *should* be different by, not what it should become — a correction
+ * that took an absolute figure would have to guess a direction, and one that took
+ * only a positive amount could not express a downward correction at all.
+ *
+ * `amount` accepts a leading `-` and nothing else loose: no thousands separators, no
+ * currency symbol, at most two decimals. Anything more forgiving would be parsed by
+ * `lib/money.ts` on the way in and by the database as a `numeric` on the way out,
+ * and those two are exactly where ADR-004's rounding bugs live.
+ */
+const adjustmentSchema = z.object({
+  accountId: z.string().uuid('That account no longer exists'),
+  amount: z
+    .string()
+    .trim()
+    .regex(/^-?\d+(\.\d{1,2})?$/, 'Enter an amount, optionally negative'),
+  reason: z.string().trim().max(200).optional(),
+})
+
+export async function createAdjustmentAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = adjustmentSchema.safeParse({
+    accountId: formData.get('accountId'),
+    amount: formData.get('amount'),
+    reason: formData.get('reason') || undefined,
+  })
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFrom(parsed.error) }
+  }
+
+  // A zero correction is a no-op that would sit in the ledger saying nothing.
+  if (Number(parsed.data.amount) === 0) {
+    return { error: 'That would not change the balance.' }
+  }
+
+  try {
+    await createAdjustment({
+      accountId: parsed.data.accountId,
+      amount: parsed.data.amount,
+      reason: parsed.data.reason,
+    })
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Could not record the correction',
+    }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/accounts')
+  return { success: 'Correction recorded' }
+}
+
+export async function deleteAdjustmentAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = uuidSchema.safeParse(formData.get('id'))
+  if (!parsed.success) return { error: 'That correction no longer exists.' }
+
+  try {
+    await deleteAdjustment({ id: parsed.data })
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Could not remove the correction',
+    }
+  }
+
+  revalidatePath('/dashboard')
+  revalidatePath('/accounts')
+  return { success: 'Correction removed' }
 }

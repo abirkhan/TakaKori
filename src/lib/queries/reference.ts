@@ -18,6 +18,84 @@ export interface Account {
   is_archived: boolean
 }
 
+/**
+ * A signed correction to an account balance.
+ *
+ * Lives outside `transactions` on purpose — see ADR-045. An adjustment is neither
+ * income nor spending, so keeping it out of the transaction table is what stops a
+ * correction from inflating "income this month". `amount` is signed, where a
+ * transaction's is positive with the direction in `type`.
+ */
+export interface AccountAdjustment {
+  id: string
+  account_id: string
+  amount: string | number
+  reason: string | null
+  created_at: string
+}
+
+export async function listAdjustments(
+  ctx: QueryContext,
+  accountId?: string,
+): Promise<AccountAdjustment[]> {
+  const { supabase } = ctx
+  const query = supabase
+    .from('account_adjustments')
+    .select('id, account_id, amount, reason, created_at')
+    .order('created_at', { ascending: false })
+
+  const { data, error } = accountId ? await query.eq('account_id', accountId) : await query
+
+  if (error) throw new Error(`Failed to load adjustments: ${error.message}`)
+  return data ?? []
+}
+
+/**
+ * Record a correction.
+ *
+ * The balance moves because of a row that says so, rather than because a starting
+ * point was overwritten with no explanation — which is the entire reason this table
+ * exists.
+ */
+export async function createAdjustment(
+  ctx: QueryContext,
+  input: { accountId: string; amount: string; reason?: string },
+) {
+  const { supabase, workspaceId } = ctx
+
+  const { data, error } = await supabase
+    .from('account_adjustments')
+    .insert({
+      workspace_id: workspaceId,
+      account_id: input.accountId,
+      amount: input.amount,
+      reason: input.reason ?? null,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw new Error(`Failed to record the adjustment: ${error.message}`)
+  return data
+}
+
+/**
+ * Undo an adjustment.
+ *
+ * Both `.eq`s: `id` because PostgREST matches every row without it, and
+ * `workspace_id` to match every other write in this layer.
+ */
+export async function deleteAdjustment(ctx: QueryContext, input: { id: string }) {
+  const { supabase, workspaceId } = ctx
+
+  const { error } = await supabase
+    .from('account_adjustments')
+    .delete()
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+
+  if (error) throw new Error(`Failed to remove the adjustment: ${error.message}`)
+}
+
 export interface Category {
   id: string
   name: string

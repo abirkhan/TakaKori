@@ -29,6 +29,7 @@ import {
   getWorkspaceTotals as getWorkspaceTotalsImpl,
   listAccounts as listAccountsImpl,
   listCategories as listCategoriesImpl,
+  listAdjustments as listAdjustmentsImpl,
 } from './reference'
 import {
   createTransaction as createTransactionImpl,
@@ -71,6 +72,17 @@ export const listAccounts = async (includeArchived = false) =>
 
 export const listCategories = async (type?: CategoryType) =>
   listCategoriesImpl(await clientContext(), type)
+
+/**
+ * Balance corrections, read in the browser.
+ *
+ * The Account screen needs these to *show why a balance is what it is*, which is
+ * the thing the edit sheet could not do before: the opening balance on screen and
+ * the balance the user sees are different numbers, and only an adjustment makes the
+ * difference legible. See ADR-045.
+ */
+export const listAdjustments = async (accountId?: string) =>
+  listAdjustmentsImpl(await clientContext(), accountId)
 
 export const createAccount = async (input: {
   name: string
