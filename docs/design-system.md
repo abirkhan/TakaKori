@@ -349,6 +349,7 @@ shape is missing from the system rather than the screen needing to improvise.
 | `ConfirmDeleteSheet` | `ui/ConfirmDeleteSheet.tsx` | Destructive confirmation. Cancel is default.                                   |
 | `RowActionsSheet`    | `ui/RowActionsSheet.tsx`    | A row's own Edit / Delete.                                                     |
 | `SegmentedControl`   | `ui/SegmentedControl.tsx`   | 2–3 mutually exclusive options.                                                |
+| `ErrorScreen`        | `app/ErrorScreen.tsx`      | Route error boundary. See 6.1b — it is the one screen with its own rules.      |
 | `TextField` etc.     | `ui/Field.tsx`              | Label, error, `aria-describedby`.                                              |
 | `ProgressRing`       | `ui/ProgressRing.tsx`       | One number, one ring.                                                          |
 | `Icon`               | `ui/Icon.tsx`               | Hand-rolled, 24×24, stroke only.                                               |
@@ -499,6 +500,40 @@ there is no reset effect and no `setState` inside one.
 Sheet state lives in the URL (`?sheet=add`), not in React state. The trigger can
 therefore be a real `<Link>` that works before hydration, and the back button
 closes the sheet, which is what a user pressing back on a modal expects.
+
+### 6.1b When a screen breaks, say what is true
+
+An error boundary replaces a screen that failed to render. Two rules, both from
+things that were true when it was built:
+
+**It never says nothing was changed.** A boundary catches a failure to *render*,
+which can follow a write that succeeded — the transaction is on the server and the
+screen failed to draw it. Claiming the user's money is safe would be the ADR-043
+mistake in a new place, and it is the worst screen in the app to make it: the only
+person reading it is already worried. So the copy says a screen did not load, and
+offers a way to try again.
+
+**It never names a cause.** The first draft said "there may be a problem with the
+connection", which is speculation — a render failure is more often a defect than a
+network problem, so it would send someone to check their Wi-Fi instead of reporting
+a bug.
+
+What it *does* show is the **digest**, and only when there is one. Next replaces the
+message of a Server Component error in production, so the digest is the only part
+of the failure that reaches the browser. Without quoting it, a bug report is
+"something broke" and cannot be matched to a log line. This is the one piece of
+technical detail the app ever puts in front of a user, and it earns its place.
+
+Voice rules apply with no exception, on a screen nobody reviews: no exclamation
+mark, never "Something went wrong", and the primary action is `retry()` — which
+re-fetches the failed segment — rather than a link that would discard the page and
+whatever the user had typed into it.
+
+**`global-error.tsx` is the exception to everything above, and necessarily so.** It
+replaces the root layout, and the root layout is what loads `globals.css`. So that
+one file carries its colours inline and shares only its copy with the others. It is
+a second copy of the tokens, and that is the cost of the alternative being a white
+page with default text on it.
 
 ### 6.1a A day is named, never printed
 

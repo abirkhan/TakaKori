@@ -269,11 +269,71 @@ proposed from what was shipped.
 - [x] **Onboarding** — a three-step checklist on the dashboard, above the summary.
       Record a transaction, add a second account, set a budget. Each step is a link
       to the screen that completes it, and each ticks itself off from real data.
+- [x] **Error boundaries** — `error.tsx` at the root, in `(auth)` and in
+      `(dashboard)`, plus `global-error.tsx`. Verified by crashing real routes in a
+      browser, not by checking the files exist.
 - [ ] Bangla (`bn-BD`) localisation
-- [ ] Sentry for production errors — and **no `error.tsx` exists anywhere in the
-      app**, so a thrown error in any route renders Next's default boundary. That
-      gap blocks Sentry and is worth closing first; the checklist for it is in
-      `docs/roadmap.md` below.
+- [ ] Sentry for production errors — the boundaries it attaches to now exist, and
+      `lib/report-error.ts` is the single seam it goes into.
+
+### The error boundary, which did not exist before this
+
+**There was no `error.tsx` anywhere in the app.** No root, no per-route, no
+`global-error`. A thrown error in any screen rendered Next's default: unstyled, no
+way back, and nothing reported anywhere. That is the gap Sentry was to be wired
+into, and it was worth closing on its own — a user mid-transaction who loses the
+screen cannot tell whether their write landed.
+
+Four boundaries, and the segmentation is the decision:
+
+| File                       | Catches                          | What it keeps                          |
+| -------------------------- | -------------------------------- | -------------------------------------- |
+| `app/(dashboard)/error.tsx` | The seven authenticated screens | The whole shell — nav, sign-out, outbox |
+| `app/(auth)/error.tsx`     | Sign-in and sign-up              | The auth shell, and no tab bar          |
+| `app/error.tsx`            | The landing page                 | The root chrome                         |
+| `app/global-error.tsx`     | **The root layout itself**       | Nothing — it has to render its own page |
+
+`error.tsx` does **not** wrap the `layout.tsx` above it, so a root-layout failure
+escapes all three and needs `global-error.tsx`. That file replaces the root layout —
+which is what loads `globals.css` and the Geist font variables — so it shares
+nothing but its copy with the others and carries the tokens inline. Its colours are
+duplicated from `globals.css` on purpose, which is a second copy of the truth and is
+noted as such.
+
+**Verified by crashing real routes**, in a browser, and asserting what rendered:
+the dashboard boundary keeps the shell and shows a digest; the auth boundary shows
+no tab bar; the global boundary renders a styled page of its own, in both colour
+schemes. Those three cases are in `e2e/onboarding.spec.ts` and they write a
+temporary `throw` into a route and put it back in a `finally`.
+
+Three things the driving found that reading would not have:
+
+- **The auth boundary's "way out" pointed at a loop.** A shared component's obvious
+  default for a second link is the dashboard; on a crashed sign-in page
+  `requireUser()` redirects straight back. The destination is now a required prop.
+- **A `role="alert"` locator matches twice** in development, because Next's dev
+  overlay carries one too.
+- **`global-error` renders no `main`**, so a locator scoped to `main` — which is the
+  natural way to skip the dev overlay — cannot reach it.
+
+### What the error screen deliberately does not say
+
+**Not "Nothing was changed."** It reads reassuringly and is not knowable: a boundary
+catches a failure to *render*, which can follow a write that succeeded. The
+transaction is on the server and the screen failed to draw it. That is ADR-043's
+mistake in a new place, and an error screen is the worst place for it, because it is
+read by someone already worried. `report-error.test.ts` asserts the copy never makes
+that claim.
+
+**Not a guess at the cause.** The first draft said "there may be a problem with the
+connection". This boundary catches render failures, and a render failure is more
+often a bug than a network problem — so it would send someone to check their Wi-Fi
+instead of reporting a defect.
+
+What it does show is the **digest**, for a server error. Next replaces the message
+of a Server Component error in production, so the digest is the only part of the
+failure that reaches the browser, and without quoting it a bug report is "something
+broke" that cannot be matched to a log line.
 
 ### What onboarding is, and what it deliberately is not
 
@@ -314,21 +374,24 @@ so the next edit has to check it.
 
 ### The next thing in this phase
 
-**There is no `error.tsx` in this repository** — not at the root, not per route,
-no `global-error.tsx`. Next.js supplies a default boundary, so a thrown error in
-any screen renders an unstyled page with no way back and nothing reported. That is
-the gap Sentry would be wired into, and it is worth closing on its own merits: a
-financial app that loses a user's session to an unhandled render error and cannot
-say so is a worse failure than one that shows "something went wrong" and a retry.
+Sentry, and the two gaps named below it.
 
 Suggested order, when Phase 4 resumes:
 
-1. `error.tsx` at the root and per route group, matching the design system's voice
-   rules — say what happened, offer a retry, never an exclamation mark.
-2. `global-error.tsx` for errors in the root layout itself, which escapes the
-   segment boundary.
-3. Sentry, once a DSN exists. `instrumentation.ts` is the client/server hook and
-   there is no Sentry dependency or config in `package.json` today.
+1. ~~`error.tsx` at the root and per route group~~ — done.
+2. ~~`global-error.tsx` for errors in the root layout itself~~ — done.
+3. Sentry, once a DSN exists. `instrumentation.ts` is the client/server hook, and
+   `lib/report-error.ts` is the one place a capture call belongs. There is no Sentry
+   dependency or config in `package.json` today.
+
+Two things worth deciding before that, both cheap now and awkward later:
+
+- **`not-found.tsx`.** There is no 404 boundary either, so an unknown URL gets
+  Next's default. Less urgent than a crash — nothing is broken and nobody is stuck —
+  but it is the same shape of work and the same voice rules.
+- **`instrumentation.ts` for unhandled rejections and `console.error`.** A render
+  error reaches `error.tsx`; a rejected promise outside a render does not, and an
+  offline-first app has more of those than a typical one.
 
 ### Previously listed here and now done
 

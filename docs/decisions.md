@@ -870,6 +870,66 @@ were invisible in review:
 
 ---
 
+## ADR-048 - A failed screen says what is true and nothing more
+
+**Status:** Accepted
+
+**Decision:** Four route boundaries — `(dashboard)`, `(auth)`, the root, and
+`global-error` — sharing one copy rule in `lib/report-error.ts`. The error screen
+never claims nothing was changed, and never names a cause.
+
+**Context:** There was no `error.tsx` anywhere in this repository. A thrown error
+in any screen rendered Next's default: unstyled, no way back, and reported nowhere.
+For a ledger that is the worst kind of failure — a user who loses a screen mid-write
+cannot tell whether the write landed.
+
+**Reason, for the segmentation:** `error.tsx` wraps `page.tsx` and everything below
+it in its segment but **not** the `layout.tsx` above it, so a root-layout failure
+escapes every one of them and needs `global-error.tsx`. And a boundary at the root
+would replace the whole shell, so the dashboard's is inside `(dashboard)` — the app
+bar, tab bar, offline banner and outbox all survive, which is the difference between
+a recoverable screen and a dead end.
+
+**Reason, for the copy.** Two rules, both written because the first draft broke
+them:
+
+1. **Never "Nothing was changed."** A boundary catches a failure to *render*, which
+   can follow a write that succeeded. The row is on the server and the screen failed
+   to draw it. This is ADR-043's failure — a confirmation that outruns what is known
+   — reached from a new direction, and an error screen is the worst place for it
+   because the only reader is already anxious. `report-error.test.ts` asserts the
+   copy never makes the claim, so it cannot come back.
+2. **Never name a cause.** The first draft said "there may be a problem with the
+   connection". A render failure is more often a defect than a network problem, so
+   it would send someone to check their Wi-Fi instead of reporting a bug.
+
+What it does show is the **digest**, only when one exists. Next replaces the message
+of a Server Component error in production, so the digest is the only part of the
+failure that reaches the browser; without it a report cannot be matched to a log
+line. `reportError` passes it separately for the same reason — a reporter that
+cannot send it cannot do the one thing it would be for.
+
+**Consequence: `global-error.tsx` duplicates the design tokens.** It replaces the
+root layout, and the root layout is what loads `globals.css` and the Geist font
+variables, so it shares nothing but its copy and carries its colours in an inline
+`<style>`. That is a second copy of the truth — normally a defect in this codebase —
+and it is accepted because the alternative is shipping a white page with default
+text, which is the failure this work exists to prevent.
+
+**Consequence: the way out is a required prop.** A shared component's obvious
+default for the secondary link is the dashboard; on a crashed sign-in page
+`requireUser()` redirects straight back to `/login`, so the default is a loop on the
+one screen where being stuck is most likely. Found by driving it, and asserted in
+`e2e/onboarding.spec.ts`.
+
+**Verified by crashing real routes**, not by checking the files exist: a throw is
+written into a route, the page is loaded, and what rendered is asserted — the shell
+survives, the auth boundary shows no tab bar, and the global boundary renders
+styled in both colour schemes. A boundary that has never caught anything is a
+boundary nobody knows works.
+
+---
+
 ## ADR-021 - CSV export pages, and never truncates silently
 
 **Status:** Accepted
