@@ -5,6 +5,7 @@ import {
   DashboardSummary,
   RecentTransactions,
 } from '@/components/dashboard/DashboardData'
+import { GettingStarted } from '@/components/onboarding/GettingStarted'
 
 /**
  * Dashboard.
@@ -34,6 +35,20 @@ export default function DashboardPage() {
   return (
     <div className="tk-stack">
       <DashboardHeader />
+
+      {/**
+       * Above the summary, and above the grid, so it spans the full column width.
+       *
+       * **First, not last.** An account with no transactions shows a summary card
+       * reading `—` in three places and a recent list reading "nothing recorded
+       * yet" — the guidance exists precisely to explain that state, so it cannot
+       * sit below the thing it explains. Full width because three steps in a
+       * half-width column would truncate every title at 390px.
+       *
+       * Renders nothing once its steps are done, so this costs a returning user
+       * no vertical space at all.
+       */}
+      <GettingStarted />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
         <div className="tk-stack">

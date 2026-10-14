@@ -757,6 +757,117 @@ and "Analytics" labels and sat on top of two other targets.
 **Consequence:** Changing the bar's height changes its clearance automatically.
 A new screen does not compute bottom padding by hand.
 
+### What this does *not* guarantee, and how it is enforced
+
+**The declaration is necessary and not sufficient.** Two numbers agreeing in
+`globals.css` says the bar and its clearance were *changed* together; it says
+nothing about whether either is correct, and nothing at all about whether a
+particular screen's content actually fits above the bar.
+
+That gap is not hypothetical. The test that found the original 113 controls was
+deleted when the two numbers became one declaration — a reasonable simplification,
+and it left the guarantee it had been protecting unenforced. The layout suite still
+passed afterwards, and would have kept passing with the clearance set to `0px`,
+because the only test covering the bar asserted the bar's *own* geometry: that it
+fits the viewport, that its labels are on screen, that the safe-area padding is
+applied. A correct bar sitting on top of every list satisfies all three.
+
+So `e2e/layout.spec.ts` asserts the property the declaration cannot: at maximum
+scroll, on every authenticated route, **nothing in `main` intersects the bar's
+band** — measured against whichever is higher, the bar's top edge or the floating
+action button's. Verified to fail when the clearance is removed and to pass when it
+is restored, because a guard nobody has seen fail is not known to be a guard.
+
+**Scrolled to the bottom, deliberately.** Content passing behind a fixed bar mid-scroll
+is what a fixed bar does; the failure is only when the *last* thing on a page cannot
+be reached.
+
+---
+
+## ADR-046 - A transaction row's day is named, not printed
+
+**Status:** Accepted
+
+**Decision:** `occurred_on` reaches a screen only through `friendlyDayLabel`
+(`lib/dates.ts`), which returns `Today` / `Yesterday` / `Fri, 9 Oct` inside a
+seven-day window and a year-bearing date outside it. The caller supplies the
+timezone, because only the caller holds the profile.
+
+**Reason:** The raw `YYYY-MM-DD` shipped onto every row in the app —
+`2026-10-09 · Food` — in the one column that has to survive truncation at 390px. It
+is a database value in the place a person reads a date, and it is 10 characters
+where "Today" is 5.
+
+Three things the obvious implementation gets wrong, all of which the tests here
+pin down:
+
+- **The window is relative backwards only.** A future date — a recurring rule, a
+  typo — is never "Today", and carries its year rather than a bare `Fri, 25 Dec`,
+  which read in October could be this December or the next. A future date is *more*
+  ambiguous than a recent past one, not less.
+- **The arithmetic is on calendar fields.** `addDaysTo` rather than subtracting
+  86,400,000ms from an instant, which lands on the wrong day twice a year across a
+  DST boundary.
+- **The timezone is the profile's, never the device's.** The call sites already hold
+  it — it is what their ranges are resolved in — so a helper that resolved the day
+  itself would either need it threaded in or would silently use UTC, which is the
+  exact class of bug `lib/dates.ts` exists to prevent.
+
+**Consequence:** `transactionSubtitle` takes a `SubtitleContext` whose `dayLabel`
+is `string | null`. `null` is the grouped list: `/transactions` prints the day on a
+sticky header that cannot scroll away, and repeating it per row would say "Today"
+seven times under a header already saying it. The date is therefore *not* part of
+the shared subtitle rule, which is why it is joined as an optional part rather than
+interpolated — an interpolated `null` produces `· Food`, and stripping the
+separator afterwards is how the two formats drift apart.
+
+---
+
+## ADR-047 - First-run guidance is derived from the ledger, not stored
+
+**Status:** Accepted
+
+**Decision:** `GettingStarted` decides what to show from three facts — is there a
+transaction, are there more accounts than signup seeded, is there a budget. There
+is no `onboarding_seen` column, and the module that decides it is pure.
+
+**Reason:** The obvious implementation is a boolean on `profiles`, set the first
+time the checklist renders. It was rejected for three reasons, and the third is
+the one that decided it.
+
+1. **It needs a migration, and migrations are currently blocked.** Phase 0's one
+   open item is `supabase db push`, which needs an interactive `supabase login`
+   and a personal access token. A feature gated on that does not ship.
+2. **It can disagree with the screen it is explaining.** `onboarding_seen = true`
+   with zero transactions hides the guidance behind precisely the empty dashboard
+   it exists to fix. Nothing renders a lie here, because nothing is stored.
+3. **It cannot come back.** Deleting your only transaction is one tap per row and
+   re-creates the dead end. A boolean is never re-evaluated, so the user is left
+   with an empty screen and no instruction.
+
+Verified by driving the real app, not by inspection: a brand-new account was
+created (`scripts/seed-new-user.ts`), all three steps walked to completion through
+the product's own UI, the section confirmed gone, then the transaction deleted and
+the first step confirmed reverted to undone.
+
+**Consequence:** The checklist is **not dismissible**, and this is a real cost — a
+user who wants no checklist cannot remove one. It is accepted because all three
+destinations are in the permanent Plan list beneath it, so nothing is ever only
+reachable from the checklist. A close button would reintroduce exactly the failure
+mode this replaces.
+
+**Two measurements are in the code rather than in a screenshot**, because both
+were invisible in review:
+
+- At 320px `RowContents` leaves the text column 110px. Every natural phrasing of
+  the three steps truncated there — "Record your first expense" became "Record your
+  first e…" — while `Row`s own rows on the same screen do not, because their
+  titles are short. `onboarding.test.ts` asserts a character budget per line.
+- A `Done` badge on a completed step measured 66px and cost the title column 80px,
+  truncating every line on the card. The tick therefore lives inside the icon tile
+  that is already there, which also satisfies "colour is never the only channel" by
+  shape rather than by a word.
+
 ---
 
 ## ADR-021 - CSV export pages, and never truncates silently

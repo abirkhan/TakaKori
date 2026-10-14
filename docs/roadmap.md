@@ -262,13 +262,73 @@ Two bugs found and fixed during this phase:
 
 ## Phase 4 — Polish and reach
 
-Not started. An earlier version of this file had a second heading also numbered
+In progress. An earlier version of this file had a second heading also numbered
 "Phase 3", directly beneath the first, which made it impossible to tell what was
 proposed from what was shipped.
 
-- Bangla (`bn-BD`) localisation
-- Onboarding
-- Sentry for production errors
+- [x] **Onboarding** — a three-step checklist on the dashboard, above the summary.
+      Record a transaction, add a second account, set a budget. Each step is a link
+      to the screen that completes it, and each ticks itself off from real data.
+- [ ] Bangla (`bn-BD`) localisation
+- [ ] Sentry for production errors — and **no `error.tsx` exists anywhere in the
+      app**, so a thrown error in any route renders Next's default boundary. That
+      gap blocks Sentry and is worth closing first; the checklist for it is in
+      `docs/roadmap.md` below.
+
+### What onboarding is, and what it deliberately is not
+
+**Derived from the ledger, not from a flag.** Each step's done-ness is a question
+about rows that already exist — is there a transaction, more than the one seeded
+account, a budget — so `src/lib/onboarding.ts` is pure and needs no migration.
+
+A stored `onboarding_seen` was rejected for three reasons, and the third is the
+one that decided it:
+
+1. **It would need a migration**, and a migration needs `supabase login`, which is
+   interactive and still the one open item in Phase 0. A feature that cannot ship
+   because of a CLI login does not ship.
+2. **It can disagree with the screen.** `onboarding_seen = true` with zero
+   transactions hides the guidance behind exactly the empty dashboard it exists to
+   fix.
+3. **It cannot come back.** Deleting your only transaction is one tap per row and
+   re-creates the dead end; nothing un-sets a flag. Verified by driving it: the
+   first step reverted to undone in the running app after the delete.
+
+So the section is not dismissible, and renders nothing once its steps are done.
+That is a deliberate cost — a user who wants no checklist cannot remove one — and
+it is accepted because all three destinations sit in the permanent Plan list
+underneath, so nothing is ever only reachable from here.
+
+**Verified by driving a real brand-new account**, created with
+`scripts/seed-new-user.ts` (one seeded Cash account, 15 categories, nothing else —
+`scripts/seed.ts` writes demo data and so cannot show a first run). Walked all
+three steps to completion through the app's own UI, confirmed the section
+disappears, then deleted the transaction and confirmed it returns.
+
+**The copy is measured against 320px**, the narrowest phone the layout suite
+tests. Every first draft truncated — at 320px `RowContents` gives the text column
+110px, and "Record your first expense" cut to "Record your first e…". `Row`'s own
+rows below it ("Budgets", "Recurring") do not truncate because their titles are
+short; matching that is the standard, and `onboarding.test.ts` asserts the budget
+so the next edit has to check it.
+
+### The next thing in this phase
+
+**There is no `error.tsx` in this repository** — not at the root, not per route,
+no `global-error.tsx`. Next.js supplies a default boundary, so a thrown error in
+any screen renders an unstyled page with no way back and nothing reported. That is
+the gap Sentry would be wired into, and it is worth closing on its own merits: a
+financial app that loses a user's session to an unhandled render error and cannot
+say so is a worse failure than one that shows "something went wrong" and a retry.
+
+Suggested order, when Phase 4 resumes:
+
+1. `error.tsx` at the root and per route group, matching the design system's voice
+   rules — say what happened, offer a retry, never an exclamation mark.
+2. `global-error.tsx` for errors in the root layout itself, which escapes the
+   segment boundary.
+3. Sentry, once a DSN exists. `instrumentation.ts` is the client/server hook and
+   there is no Sentry dependency or config in `package.json` today.
 
 ### Previously listed here and now done
 

@@ -226,6 +226,20 @@ From `md` up the bar disappears — but the transactions screen still needs a wa
 to add, so `PageHeader` carries an Add action there. A mobile-only trigger is a
 missing feature on desktop, not a responsive detail.
 
+**The declaration above is necessary and not sufficient**, and the difference is
+worth stating because it is the shape of a bug that reached review described as
+obvious. Two numbers agreeing in `globals.css` says the bar and its clearance were
+*changed* together; it says nothing about whether the clearance is correct for a
+particular screen, and nothing about whether content fits above the bar at all.
+
+So the guarantee is tested rather than assumed: `e2e/layout.spec.ts` asserts that
+at maximum scroll, on every authenticated route, **nothing in `main` intersects the
+bar's band** — measured against the higher of the bar's top edge and the FAB's.
+The earlier test that covered this was deleted when the two numbers became one
+declaration, which left the property unenforced: the remaining test asserted the
+bar's own geometry, and a correct bar covering every list passes that. The new test
+was verified to fail with the clearance removed and to pass with it restored.
+
 ### 5.2 Safe areas
 
 `viewportFit: 'cover'` and `env(safe-area-inset-bottom)` on the tab bar, on the
@@ -368,6 +382,38 @@ about:
   screen; a sheet is in the top layer, so chrome behind it is inert and the user
   meets it after dismissing, which is the right order.
 
+### First-run guidance is derived, not remembered
+
+`GettingStarted` on the dashboard is a three-step checklist, and each step's
+state is **a question about rows that already exist** rather than a flag saying
+the checklist has been seen.
+
+This is a load-bearing decision and not an implementation detail:
+
+- **A flag needs a migration**, and Phase 0's one open item is `supabase db push`,
+  which is blocked on an interactive `supabase login`. A feature that cannot ship
+  because of a CLI login does not ship.
+- **A flag can disagree with the screen.** `onboarding_seen = true` alongside zero
+  transactions hides the guidance behind exactly the empty dashboard it exists to
+  fix.
+- **A flag cannot come back.** Deleting your only transaction re-creates the dead
+  end, and nothing un-sets a flag.
+
+So it is not dismissible, and it renders nothing once its steps are done. That is
+a real cost — a user who wants no checklist cannot remove one — and it is accepted
+because all three destinations sit in the permanent Plan list below, so nothing is
+ever only reachable from here.
+
+**Its copy is budgeted against 320px.** At that width `RowContents` gives the text
+column 110px, and every natural phrasing truncated. `onboarding.test.ts` asserts
+the character budget so the next edit has to check it rather than eyeball a
+screenshot at 390px.
+
+**A completed step swaps its tile glyph for a tick rather than gaining a "Done"
+badge.** The badge measured 66px and cost the title column 80px — enough to
+truncate every line on the card. A tick inside the icon tile that is already there
+costs nothing, and it satisfies "colour is never the only channel" by *shape*.
+
 ### The one overlay: the toast
 
 A transient "Expense saved." is the only thing in this app that floats, and it is
@@ -453,6 +499,23 @@ there is no reset effect and no `setState` inside one.
 Sheet state lives in the URL (`?sheet=add`), not in React state. The trigger can
 therefore be a real `<Link>` that works before hydration, and the back button
 closes the sheet, which is what a user pressing back on a modal expects.
+
+### 6.1a A day is named, never printed
+
+Transaction rows never show `occurred_on`. `friendlyDayLabel` resolves it to
+**Today / Yesterday / Fri, 9 Oct** inside a seven-day window, and to a
+year-bearing date (`9 Oct 2025`) outside it, because past a week "9 Oct" is
+genuinely ambiguous with the same date this year.
+
+The timezone is the profile's, so the caller supplies the label
+(`transactionSubtitle` takes a `SubtitleContext`). A future date is never
+"Today", and carries its year even inside the window — a date two months out is
+*more* ambiguous than one from last week, not less.
+
+`/transactions` prints the day on a **sticky day header** rather than on each
+row, and passes `dayLabel: null` so the subtitle does not repeat it. The header is
+opaque (`--canvas`), because a translucent sticky header over a column of taka is
+unreadable exactly when it is needed.
 
 ### 6.2 One action target per row
 
@@ -564,3 +627,5 @@ If either of these decisions is wrong, there is one file to replace in each case
 | Two action links on every row           | One `⋯` opening a `RowActionsSheet`           |
 | 12px caption text                       | 13px; or `.tk-badge` if it is a label         |
 | `pb-32` guessed against a ~77px bar     | `--nav-clear`, declared beside `--nav-height` |
+| A raw `occurred_on` on a row            | `friendlyDayLabel`, in the user's timezone    |
+| Bars drawn for a single data point      | The figure, and a line about the trend        |
