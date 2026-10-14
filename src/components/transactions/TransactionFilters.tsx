@@ -1,9 +1,11 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import type { Account, Category } from '@/lib/queries/reference'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
+import { Icon } from '@/components/ui/Icon'
+import { buttonClass } from '@/components/ui/button'
 
 const PERIODS = [
   { value: '', label: 'All time' },
@@ -68,11 +70,132 @@ export function TransactionFilters({
     })
   }
 
-  const hasFilters =
-    current('preset') || current('type') || current('category') || current('account')
+  /**
+   * Back to no filters at all, as one navigation.
+   *
+   * `?sheet=` is dropped along with the filters, because a bare `/transactions`
+   * navigation is what every other clear in this app links to — following the same
+   * rule rather than carrying a sheet the user never opened through a reset.
+   */
+  function clearAll() {
+    startTransition(() => {
+      router.push('/transactions')
+    })
+  }
+
+  /**
+   * `Boolean` rather than the raw `||` chain, which yields the *last string* rather
+   * than a boolean — and `useState` takes that string as its initial state, so the
+   * panel would open as `''`, which is falsy, and the filter panel would be shut on
+   * a filtered URL. Typed as a boolean so that mistake cannot compile.
+   */
+  const hasFilters = Boolean(
+    current('preset') || current('type') || current('category') || current('account'),
+  )
+
+  /**
+   * The chips that stand in for the collapsed panel.
+   *
+   * **A chip names its filter's value, not the filter.** "Expense" tells you what is
+   * being shown; "Type: expense" tells you which control to go and change. The
+   * label is omitted deliberately — on a 390px screen there is room for one idea per
+   * chip, and the value is the part that is not guessable from context.
+   *
+   * Lookups go through the same lists the dropdowns are built from, so a chip can
+   * never show a name the select does not offer, and both are fed by one query.
+   */
+  const chips: { label: string; onClear: () => void }[] = []
+
+  /**
+   * **A chip only appears for a filter that is actually set.**
+   *
+   * "All time" and "All" are the *default* values, carried as `''` — the segment's
+   * own "no filter" option. A lookup by value finds them whether or not the user
+   * chose anything, so the first version of this showed "All time" and "All" as
+   * active chips on a completely unfiltered screen: two chips claiming filters that
+   * did not exist, and a "clear" that would change nothing.
+   *
+   * So the empty value is excluded before the lookup, not after it. A chip here has
+   * to mean "this is narrowing your list", which is false by definition for the
+   * default.
+   */
+  const presetValue = current('preset') as PeriodValue
+  const presetLabel = presetValue
+    ? PERIODS.find((p) => p.value === presetValue)?.label
+    : undefined
+  if (presetLabel) chips.push({ label: presetLabel, onClear: () => update('preset', '') })
+
+  const typeValue = current('type') as TypeValue
+  const typeLabel = typeValue ? TYPES.find((t) => t.value === typeValue)?.label : undefined
+  if (typeLabel) chips.push({ label: typeLabel, onClear: () => update('type', '') })
+
+  const categoryId = current('category')
+  const categoryName = categories.find((c) => c.id === categoryId)?.name
+  if (categoryName) chips.push({ label: categoryName, onClear: () => update('category', '') })
+
+  const accountId = current('account')
+  const accountName = accounts.find((a) => a.id === accountId)?.name
+  if (accountName) chips.push({ label: accountName, onClear: () => update('account', '') })
+
+  /**
+   * Open by default when filters are already active, closed when they are not.
+   *
+   * Someone arriving at a filtered URL wants to see what is filtering them — a
+   * collapsed panel would hide the very state they navigated to find. Arriving with
+   * nothing set, the panel is the thing in the way, so it starts out of the way.
+   */
+  const [open, setOpen] = useState(hasFilters)
 
   return (
     <section className="tk-card flex flex-col gap-3.5" aria-label="Filters">
+      {/*
+        One row: the disclosure, the active chips, and the way out of all of them.
+        `flex-wrap` because three filters at 390px do not fit one line, and a chip row
+        that overflows its card is the failure `.tk-segment-scroll` exists to avoid.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={buttonClass('quiet', { size: 'sm' })}
+          aria-expanded={open}
+          aria-controls="transaction-filter-panel"
+        >
+          <Icon
+            name="chevronRight"
+            size={15}
+            className={open ? 'rotate-90 transition-transform' : 'transition-transform'}
+          />
+          Filters
+        </button>
+
+        {!open &&
+          chips.map((chip) => (
+            <button
+              key={chip.label}
+              type="button"
+              onClick={chip.onClear}
+              className="tk-chip tk-chip-active"
+              aria-label={`Remove the ${chip.label} filter`}
+            >
+              {chip.label}
+              <Icon name="close" size={13} />
+            </button>
+          ))}
+
+        {!open && hasFilters && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="tk-caption text-accent font-medium"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div id="transaction-filter-panel" className="flex flex-col gap-3.5">
       <SegmentedControl
         name="preset-filter"
         ariaLabel="Period"
@@ -125,18 +248,12 @@ export function TransactionFilters({
         </label>
       </div>
 
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={() => {
-            startTransition(() => {
-              router.push('/transactions')
-            })
-          }}
-          className="tk-caption text-accent self-start font-medium"
-        >
+      {open && hasFilters && (
+        <button type="button" onClick={clearAll} className="tk-caption text-accent self-start font-medium">
           Clear filters
         </button>
+      )}
+        </div>
       )}
     </section>
   )

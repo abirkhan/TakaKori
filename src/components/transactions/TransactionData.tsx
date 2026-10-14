@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { todayIn, resolveRange, monthLabel, type DateRangePreset } from '@/lib/dates'
+import { todayIn, resolveRange, monthLabel, friendlyDayLabel, type DateRangePreset } from '@/lib/dates'
 import { formatMinor, toMinor, toNumericString } from '@/lib/money'
 import { transactionSubtitle } from '@/lib/transaction-view'
 import { getProfile, listAccounts, listCategories, listTransactions } from '@/lib/queries/client'
@@ -102,10 +102,12 @@ function TransactionsBody() {
     sign: amountSign(t.type),
     tone: t.type,
     title: t.description ?? t.category?.name ?? 'Transfer',
-    // One rule for what a transaction row's second line says, shared with the
-    // dashboard so the two screens cannot drift apart on the same record.
-    subtitle: transactionSubtitle(t),
+    // `dayLabel: null` — the sticky group header above these rows already carries
+    // the day, and it cannot scroll away. The subtitle rule itself stays in
+    // `transaction-view` so this screen and the dashboard cannot drift apart.
+    subtitle: transactionSubtitle(t, { dayLabel: null }),
     occurredOn: t.occurred_on,
+    dayLabel: friendlyDayLabel(t.occurred_on, timezone),
     editAmount: toNumericString(toMinor(t.amount), currency),
     description: t.description,
   }))

@@ -6,7 +6,7 @@ import { buttonClass } from './button'
 import { Alert } from './Alert'
 import { notifySuccess } from '@/components/app/Toast'
 import type { ActionState } from '@/actions/transactions'
-import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteAction, QUEUED_SUCCESS } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
 import type { QueuedWriteKind } from '@/lib/client/outbox'
@@ -104,8 +104,15 @@ const [state, formAction, , attempt] = useWriteAction<ActionState>(action, {}, {
     if (!state.success) return
     if (announced.current) return
     announced.current = true
-    notifySuccess(savedMessage)
-  }, [state.success, savedMessage])
+    /**
+     * **A queued delete has not deleted anything yet.** The row is still on the
+     * server and only the intent is on this device, so "Transaction deleted." is
+     * the one thing this toast must not say (ADR-043). `queueKind` is passed by the
+     * transaction list precisely so an offline delete is queued rather than refused,
+     * which means this path is reachable with no connection at all.
+     */
+    notifySuccess(state.queued ? QUEUED_SUCCESS : savedMessage)
+  }, [state.success, state.queued, savedMessage])
 
   // Close only once the delete has actually succeeded, so a failure leaves the
   // sheet open next to the message explaining why. Calling the prop rather than

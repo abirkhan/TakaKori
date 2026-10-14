@@ -10,7 +10,7 @@ import { Alert } from '@/components/ui/Alert'
 import { TextField } from '@/components/ui/Field'
 import { buttonClass } from '@/components/ui/button'
 import { notifySuccess } from '@/components/app/Toast'
-import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteAction, QUEUED_SUCCESS } from '@/lib/client/useWriteAction'
 
 interface EditableTransaction extends Pick<
   ExportableTransaction,
@@ -92,12 +92,22 @@ export function EditTransactionSheet({
     if (!state.success) return
     if (announced.current) return
     announced.current = true
+    /**
+     * A queued edit is not saved — the change is on this device only, and this sheet
+     * has `queueKind: 'transaction.update'`, so an offline edit reaches here
+     * (ADR-043). Saying "Saved — ৳500.00" here would state the amount as the
+     * server's belief when it is only this device's.
+     */
+    if (state.queued) {
+      notifySuccess(QUEUED_SUCCESS)
+      return
+    }
     notifySuccess(
       <>
         Saved — <span className="tk-money">{formatMinor(toMinor(transaction.amount))}</span>.
       </>,
     )
-  }, [state.success, transaction.amount])
+  }, [state.success, state.queued, transaction.amount])
 
   return (
     <Modal

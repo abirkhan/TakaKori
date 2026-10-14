@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { ActionState } from '@/actions/transactions'
-import { useWriteAction } from '@/lib/client/useWriteAction'
+import { useWriteAction, QUEUED_SUCCESS } from '@/lib/client/useWriteAction'
 import { useWriteInvalidation } from '@/lib/client/useWriteInvalidation'
 import type { WriteKind } from '@/lib/client/invalidations'
 import type { QueuedWriteKind } from '@/lib/client/outbox'
@@ -132,12 +132,21 @@ export function WriteForm({
       announcedSuccess.current = null
       return
     }
-    const message = savedMessage ?? CONFIRMATION[kind]
+    /**
+     * **A queued write is not saved.** ADR-043 requires the wording "saved on this
+     * device" and never "saved", because IndexedDB can be evicted and a queued write
+     * cannot outlive that. Three of this form's call sites queue a *delete* — a
+     * budget, a recurring rule, an occurrence — and announcing "Budget deleted."
+     * for one tells the user their budget is gone when the server still has it and
+     * this device may forget it overnight. `useWriteToast` already got this right;
+     * this effect, written separately, did not.
+     */
+    const message = state.queued ? QUEUED_SUCCESS : (savedMessage ?? CONFIRMATION[kind])
     const last = announcedSuccess.current
     if (last && last.attempt === attempt && last.message === message) return
     announcedSuccess.current = { attempt, message }
     notifySuccess(message)
-  }, [state.success, savedMessage, kind, attempt, pending])
+  }, [state.success, state.queued, savedMessage, kind, attempt, pending])
 
   useEffect(() => {
     if (pending) return

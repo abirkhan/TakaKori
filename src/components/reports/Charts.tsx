@@ -16,6 +16,7 @@
  * labelled, and both series keep a shape (income solid, expense rounded top)
  * so they stay distinguishable in greyscale.
  */
+import { StatTile } from '@/components/ui/StatTile'
 
 export interface MonthPoint {
   label: string
@@ -34,23 +35,57 @@ export function MonthlyTrend({
 }) {
   const peak = Math.max(1, ...points.flatMap((p) => [p.income, p.expense]))
 
-  // One month of data is not a trend. The bars still render — the figures are
-  // real — but the chart is labelled for what it is rather than implying a
-  // comparison that was never made.
+  /**
+   * One month of data is not a trend.
+   *
+   * **A single point is not drawn as a bar at all.** With one month the "chart" was
+   * two full-height rounded shapes side by side — the expense one rendering as a red
+   * dome, because `rounded-t-full` on a bar filling its whole track turns the corner
+   * radius into a semicircle. It read as a broken chart rather than as one month's
+   * worth of data, and no amount of labelling fixed that.
+   *
+   * So the single-month case states the two figures and stops. The table below is
+   * still rendered, which is where the numbers live either way — the chart is the
+   * part that needs two points to mean anything.
+   */
   const single = points.length < 2
+
+  if (single) {
+    const point = points[0]
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-end justify-between gap-4">
+          <StatTile
+            icon="arrowDownLeft"
+            tone="brand"
+            label="Income"
+            value={formatMoney(point?.income ?? 0)}
+          />
+          <StatTile
+            icon="arrowUpRight"
+            tone="rose"
+            label="Expense"
+            value={formatMoney(point?.expense ?? 0)}
+          />
+        </div>
+
+        <p className="tk-caption">
+          {point?.empty
+            ? `Nothing recorded in ${point.label}. A trend appears once there is more than one month.`
+            : `One month so far. Add more to see a trend across ${point?.label ?? 'this month'}.`}
+        </p>
+
+        <MonthTable points={points} formatMoney={formatMoney} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {single && <p className="tk-caption">One month so far. Add more to see a trend.</p>}
-
       <div
         className="flex items-end gap-1 overflow-x-auto"
         role="img"
-        aria-label={
-          single
-            ? `Income and expense for ${points[0]?.label ?? 'this month'}`
-            : `Income and expense per month across ${points.length} months`
-        }
+        aria-label={`Income and expense per month across ${points.length} months`}
       >
         {points.map((p) => (
           <div key={p.label} className="flex min-w-14 flex-1 flex-col items-center gap-1.5">
@@ -80,44 +115,62 @@ export function MonthlyTrend({
         </span>
       </div>
 
-      {/* The actual numbers, available to assistive tech and to anyone who
-          wants the precise figures rather than a bar height. */}
-      <table className="w-full text-xs">
-        <caption className="sr-only">Income and expense per month</caption>
-        <thead>
-          <tr className="text-muted">
-            <th scope="col" className="py-1.5 font-medium">
-              Month
-            </th>
-            <th scope="col" className="py-1.5 text-right font-medium">
-              Income
-            </th>
-            <th scope="col" className="py-1.5 text-right font-medium">
-              Expense
-            </th>
-            <th scope="col" className="py-1.5 text-right font-medium">
-              Saved
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.label} className="border-hairline border-t">
-              <td className="py-1.5">{p.label}</td>
-              <td className="py-1.5 text-right tabular-nums">{formatMoney(p.income)}</td>
-              <td className="py-1.5 text-right tabular-nums">{formatMoney(p.expense)}</td>
-              <td
-                className={`py-1.5 text-right tabular-nums ${
-                  p.income - p.expense < 0 ? 'text-expense' : 'text-income'
-                }`}
-              >
-                {formatMoney(p.income - p.expense)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <MonthTable points={points} formatMoney={formatMoney} />
     </div>
+  )
+}
+
+/**
+ * The figures behind the chart, as a table.
+ *
+ * **Its own component because the single-month case renders it without a chart.**
+ * That table was previously inline in the chart's JSX, so the branch that shows the
+ * same numbers without bars would have had to duplicate it — and a duplicated
+ * financial table is a place for the two to disagree.
+ */
+function MonthTable({
+  points,
+  formatMoney,
+}: {
+  points: MonthPoint[]
+  formatMoney: (minor: number) => string
+}) {
+  return (
+    <table className="w-full text-xs">
+      <caption className="sr-only">Income and expense per month</caption>
+      <thead>
+        <tr className="text-muted">
+          <th scope="col" className="py-1.5 font-medium">
+            Month
+          </th>
+          <th scope="col" className="py-1.5 text-right font-medium">
+            Income
+          </th>
+          <th scope="col" className="py-1.5 text-right font-medium">
+            Expense
+          </th>
+          <th scope="col" className="py-1.5 text-right font-medium">
+            Saved
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {points.map((p) => (
+          <tr key={p.label} className="border-hairline border-t">
+            <td className="py-1.5">{p.label}</td>
+            <td className="py-1.5 text-right tabular-nums">{formatMoney(p.income)}</td>
+            <td className="py-1.5 text-right tabular-nums">{formatMoney(p.expense)}</td>
+            <td
+              className={`py-1.5 text-right tabular-nums ${
+                p.income - p.expense < 0 ? 'text-expense' : 'text-income'
+              }`}
+            >
+              {formatMoney(p.income - p.expense)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 

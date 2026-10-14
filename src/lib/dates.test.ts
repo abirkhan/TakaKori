@@ -6,6 +6,8 @@ import {
   addDaysTo,
   monthLabel,
   formatDayLabel,
+  formatDayWithYear,
+  friendlyDayLabel,
 } from '@/lib/dates'
 
 const DHAKA = 'Asia/Dhaka' // UTC+6, no DST
@@ -187,5 +189,89 @@ describe('formatDayLabel', () => {
 
     expect(inUtc).toMatch(/^Tue,? 29 Sep/)
     expect(formatDayLabel('2026-09-30', DHAKA)).toBe('Wed, 30 Sep')
+  })
+})
+
+describe('formatDayWithYear', () => {
+  it('names the year, which "Wed, 30 Sep" does not', () => {
+    expect(formatDayWithYear('2025-09-30', DHAKA)).toBe('30 Sep 2025')
+  })
+
+  it('agrees with formatDayLabel on the month, in every zone', () => {
+    // The month name comes from the formatter in both, so a locale cannot make one
+    // say "Sep" and the other "Sept" — the ICU difference `formatDayLabel` normalises.
+    for (const tz of [DHAKA, KOLKATA, NEW_YORK]) {
+      expect(formatDayWithYear('2026-09-30', tz)).toBe('30 Sep 2026')
+    }
+  })
+
+  it('uses the calendar day, not the instant, so no zone shifts it', () => {
+    // Midnight in Dhaka on the 30th is 18:00Z on the 29th. Reading the day back off
+    // the instant would print 29 here — which is the bug `formatDayLabel` documents
+    // and the reason the digits come from the string rather than a Date.
+    expect(formatDayWithYear('2026-09-30', DHAKA)).toBe('30 Sep 2026')
+    expect(formatDayWithYear('2026-09-30', NEW_YORK)).toBe('30 Sep 2026')
+  })
+})
+
+describe('friendlyDayLabel', () => {
+  // 2026-10-09 is a Friday. Every `now` below is midday UTC so the Dhaka calendar
+  // day is unambiguous.
+  const now = new Date('2026-10-09T06:00:00Z') // 12:00 in Dhaka
+
+  it('names today and yesterday rather than printing a date', () => {
+    expect(friendlyDayLabel('2026-10-09', DHAKA, now)).toBe('Today')
+    expect(friendlyDayLabel('2026-10-08', DHAKA, now)).toBe('Yesterday')
+  })
+
+  it('uses a day-and-month within the week, which is what a scan matches against', () => {
+    // Three days back is still inside the window.
+    expect(friendlyDayLabel('2026-10-06', DHAKA, now)).toBe('Tue, 6 Oct')
+    // Seven days back is the boundary and is still a day.
+    expect(friendlyDayLabel('2026-10-02', DHAKA, now)).toBe('Fri, 2 Oct')
+  })
+
+  it('adds the year past the window, because "9 Oct" is ambiguous a year later', () => {
+    expect(friendlyDayLabel('2026-10-01', DHAKA, now)).toBe('1 Oct 2026')
+    expect(friendlyDayLabel('2025-10-09', DHAKA, now)).toBe('9 Oct 2025')
+  })
+
+  /**
+   * The boundary, asserted from both sides.
+   *
+   * `daysBetween` walks the calendar, so this also proves the walk terminates and
+   * that the window edge is where it is claimed to be rather than one day either
+   * side of it.
+   */
+  it('switches format exactly at seven days back', () => {
+    expect(friendlyDayLabel('2026-10-02', DHAKA, now)).not.toMatch(/\d{4}/)
+    expect(friendlyDayLabel('2026-10-01', DHAKA, now)).toMatch(/2026$/)
+  })
+
+  it('never calls a future date today or yesterday, and always names its year', () => {
+    // A recurring rule or a typo can file a transaction ahead of today. "Today" for
+    // a future date would be a claim the ledger cannot support — and a bare
+    // "Fri, 25 Dec" is *more* ambiguous than a recent past date, because read in
+    // October it could be this December or the next.
+    expect(friendlyDayLabel('2026-10-10', DHAKA, now)).toBe('10 Oct 2026')
+    expect(friendlyDayLabel('2026-12-25', DHAKA, now)).toBe('25 Dec 2026')
+  })
+
+  it('resolves the day boundary in the user zone, not in UTC', () => {
+    // 22:00Z on the 9th is already the 10th in Dhaka (UTC+6). A UTC-based "today"
+    // would call the 10th "Tomorrow" for a user six hours ahead.
+    const lateUtc = new Date('2026-10-09T22:00:00Z')
+    expect(friendlyDayLabel('2026-10-10', DHAKA, lateUtc)).toBe('Today')
+    expect(friendlyDayLabel('2026-10-09', DHAKA, lateUtc)).toBe('Yesterday')
+    // The same instant is still the 9th in New York, so the same date is Today there.
+    expect(friendlyDayLabel('2026-10-09', NEW_YORK, lateUtc)).toBe('Today')
+  })
+
+  it('crosses a month boundary without losing the year or the month', () => {
+    const firstOfMonth = new Date('2026-11-01T06:00:00Z')
+    // Yesterday is the 31st: a day label, because it is inside the window.
+    expect(friendlyDayLabel('2026-10-31', DHAKA, firstOfMonth)).toBe('Yesterday')
+    // A month earlier is outside it, so it carries the year.
+    expect(friendlyDayLabel('2026-10-01', DHAKA, firstOfMonth)).toBe('1 Oct 2026')
   })
 })

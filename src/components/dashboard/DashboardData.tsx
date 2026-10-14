@@ -5,6 +5,7 @@ import { formatMinor, toMinor } from '@/lib/money'
 import {
   addDaysTo,
   formatDayLabel,
+  friendlyDayLabel,
   monthLabel,
   resolveRange,
   startOfMonthOffset,
@@ -163,9 +164,15 @@ export function DashboardSummary() {
           verdict leads, in words and a number, with spending underneath as the
           supporting detail. Overspending leads with the overspend, because that
           is the case which needs a decision. */}
+      {/**
+       * **Names what was kept.** It read "You kept in October", and the object of
+       * the verb was missing — the figure directly beneath supplies the number, so
+       * the line above it has to supply the noun. "Money" is also the thing a user
+       * opening a finance app is asking about.
+       */}
       <p className="tk-eyebrow">
         {timezone && !loading
-          ? `${monthNet >= 0 ? 'You kept' : 'You overspent'} in ${monthLabel(resolveMonth(timezone).from)}`
+          ? `${monthNet >= 0 ? 'You kept' : 'You overspent'} money in ${monthLabel(resolveMonth(timezone).from)}`
           : 'This month'}
       </p>
 
@@ -183,6 +190,19 @@ export function DashboardSummary() {
           <span className="tk-badge tk-badge-neutral">of {money(monthIncome)} earned</span>
         )}
 
+        {/**
+         * **The milestone, not the standing state.**
+         *
+         * "First month tracked" was a permanent badge for anyone whose previous month
+         * was empty — which is every new user, shown the same word every day for as
+         * long as they keep no prior month. A milestone belongs in the transcript of
+         * what happened, not beside a figure that is live.
+         *
+         * So it now sits with the other "last synced" style notes: rendered once the
+         * month's figures are real, styled as a caption, and only while it is true —
+         * the moment there is a previous month to compare against, a percentage
+         * replaces it and this line is gone for good.
+         */}
         {!loading &&
           (changePercent !== null ? (
             <span
@@ -192,7 +212,7 @@ export function DashboardSummary() {
               {Math.abs(changePercent)}% {changePercent <= 0 ? 'below' : 'above'} last month
             </span>
           ) : (
-            <span className="tk-badge tk-badge-neutral">First month tracked</span>
+            <span className="tk-caption">Your first month of tracking</span>
           ))}
       </div>
 
@@ -223,7 +243,19 @@ export function DashboardSummary() {
 export function RecentTransactions() {
   const profile = useProfile()
   const currency = profile.data?.currency ?? 'BDT'
+  const timezone = profile.data?.timezone ?? null
   const recent = useQuery(keys.transactions('recent:6'), () => listTransactions({ limit: 6 }))
+
+  /**
+   * The subtitle's date half, or `null` because this screen has no day header.
+   *
+   * Six rows on a dashboard are a glance, not a scan, so the date stays on the row
+   * — but as a name ("Today") rather than `2026-10-09`. Falls back to `null` until
+   * the profile lands so the label can never be computed against the device's
+   * timezone, which is the one thing `dates.ts` exists to prevent.
+   */
+  const dayLabel = (occurredOn: string) =>
+    timezone ? friendlyDayLabel(occurredOn, timezone) : null
 
   return (
     <section>
@@ -288,7 +320,7 @@ export function RecentTransactions() {
                 title={t.description ?? t.category?.name ?? 'Transfer'}
                 // The same rule as `/transactions`, so one record never reads two
                 // ways on two screens.
-                subtitle={transactionSubtitle(t)}
+                subtitle={transactionSubtitle(t, { dayLabel: dayLabel(t.occurred_on) })}
                 trailing={
                   <span className={amountClass(t.type)}>
                     {amountSign(t.type)}

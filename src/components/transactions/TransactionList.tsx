@@ -37,6 +37,15 @@ export interface TransactionRowView {
   title: string
   subtitle: string
   occurredOn: string
+  /**
+   * "Today" / "Yesterday" / "9 Oct 2025" — the day this row belongs to, already
+   * resolved in the user's timezone by the caller.
+   *
+   * **Carried rather than computed here** for the same reason the subtitle's date is:
+   * only the caller holds `profiles.timezone`, and a `friendlyDayLabel` call inside
+   * this component would need it threaded in or would fall back to the device's.
+   */
+  dayLabel: string
   /** The editable value for the sheet: a decimal string, per the Server Action. */
   editAmount: string
   description: string | null
@@ -51,46 +60,80 @@ export function TransactionList({ rows }: { rows: TransactionRowView[] }) {
   const dismiss = () => setOpen(null)
   const select = (kind: Open['kind']) => () => setOpen({ kind })
 
+  /**
+   * Consecutive rows sharing a day under one header.
+   *
+   * **Relies on the caller's ordering, which is the database's** (`occurred_on desc,
+   * id desc`). This does not sort: a second sort here could only disagree with the
+   * server about order, and a list that groups by one order and displays another
+   * puts a day's rows under the wrong heading.
+   *
+   * Each day is its own `<ul>` rather than one list with header rows, because a
+   * heading inside a list is announced as an item. Separate lists also give the
+   * header something to stick to while its own rows scroll under it.
+   */
+  const groups: { day: string; label: string; rows: TransactionRowView[] }[] = []
+  for (const row of rows) {
+    const last = groups[groups.length - 1]
+    // Keyed on `occurredOn`, not `dayLabel`: two different days can share a label
+    // ("Today" in two timezones is one day here, but a label collision would
+    // silently merge two headings if it were ever the grouping key).
+    if (last && last.day === row.occurredOn) last.rows.push(row)
+    else groups.push({ day: row.occurredOn, label: row.dayLabel, rows: [row] })
+  }
+
   return (
     <>
-      <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
-        {rows.map((row) => (
-          <li key={row.id}>
-            <Row
-              icon={
-                row.tone === 'transfer'
-                  ? 'repeat'
-                  : row.tone === 'income'
-                    ? 'arrowDownLeft'
-                    : 'arrowUpRight'
-              }
-              tone={row.tone === 'income' ? 'brand' : row.tone === 'transfer' ? 'sky' : 'rose'}
-              title={row.title}
-              titleAttribute={row.title}
-              subtitle={row.subtitle}
-              trailing={
-                <span className={amountClass(row.tone)}>
-                  {row.sign}
-                  {row.formattedAmount}
-                </span>
-              }
-              actions={
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelected(row)
-                    setOpen({ kind: 'actions' })
-                  }}
-                  className="tk-btn-icon"
-                  aria-label={`Actions for ${row.title}`}
-                >
-                  <Icon name="dots" size={18} />
-                </button>
-              }
-            />
-          </li>
-        ))}
-      </ul>
+      {groups.map((group) => (
+        <section key={group.day}>
+          {/*
+            `sticky top-0` inside a scrolling page, so it parks just under the app
+            bar rather than at the very top of the viewport where the header would
+            cover it. `z-10` keeps the rows from painting over it; the surface is
+            opaque because a translucent sticky header over a list of money is
+            unreadable.
+          */}
+          <h3 className="tk-day-head sticky top-0 z-10">{group.label}</h3>
+          <ul className="tk-card tk-list divide-hairline flex flex-col divide-y">
+            {group.rows.map((row) => (
+              <li key={row.id}>
+                <Row
+                  icon={
+                    row.tone === 'transfer'
+                      ? 'repeat'
+                      : row.tone === 'income'
+                        ? 'arrowDownLeft'
+                        : 'arrowUpRight'
+                  }
+                  tone={row.tone === 'income' ? 'brand' : row.tone === 'transfer' ? 'sky' : 'rose'}
+                  title={row.title}
+                  titleAttribute={row.title}
+                  subtitle={row.subtitle}
+                  trailing={
+                    <span className={amountClass(row.tone)}>
+                      {row.sign}
+                      {row.formattedAmount}
+                    </span>
+                  }
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(row)
+                        setOpen({ kind: 'actions' })
+                      }}
+                      className="tk-btn-icon"
+                      aria-label={`Actions for ${row.title}`}
+                    >
+                      <Icon name="dots" size={18} />
+                    </button>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
       {selected && open?.kind === 'actions' && (
         <RowActionsSheet

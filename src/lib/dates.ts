@@ -197,6 +197,100 @@ export function monthLabel(ym: string): string {
 }
 
 /**
+ * How far back a date still gets a friendly name before it falls back to a date.
+ *
+ * A week, not a month: "Fri, 9 Oct" is a useful label for a while after the fact,
+ * and beyond that the reader is looking at history rather than recalling a day.
+ */
+const FRIENDLY_WINDOW_DAYS = 7
+
+/**
+ * The name a person would use for a day: "Today", "Yesterday", "Fri, 9 Oct".
+ *
+ * **Raw `occurred_on` is a database value, not a date a person wrote.** It shipped
+ * onto every transaction row — `2026-10-09 · Food` — which is both unreadable and
+ * needlessly long in the one column that has to truncate at 390px.
+ *
+ * Relative for the last week, because that is the range people actually scan: this
+ * morning's expenses are "Today", and "Yesterday" needs no thought. Beyond the
+ * window it becomes `formatDayLabel`, which is already the format used elsewhere.
+ *
+ * **Future dates are never "Today".** A recurring rule or a typo can put a
+ * transaction in the future, and `days === 0` is reached by comparison rather than
+ * by assuming the value is not ahead of today.
+ *
+ * All arithmetic is on calendar fields in the target timezone, via `addDaysTo` —
+ * subtracting 86,400,000ms from an instant lands on the wrong day twice a year.
+ */
+export function friendlyDayLabel(ymd: string, timeZone: string, now: Date = new Date()): string {
+  const today = todayIn(timeZone, now)
+  if (ymd === today) return 'Today'
+
+  const yesterday = addDaysTo(today, -1, timeZone)
+  if (ymd === yesterday) return 'Yesterday'
+
+  /**
+   * Days *ahead* are outside the relative window — "in 3 days" would be a claim the
+   * ledger cannot support — but they still carry the **year**.
+   *
+   * A future date is *more* ambiguous than a recent past one, not less: "Fri, 25 Dec"
+   * read in October could be this December or the next, and the reader has no way to
+   * tell. Returning the bare `formatDayLabel` here was a case the tests caught on the
+   * way in, and it is the reason both branches below use `formatDayWithYear` rather
+   * than one of each.
+   */
+  if (ymd > today) return formatDayWithYear(ymd, timeZone)
+
+  /**
+   * Within a week it reads as a day ("Fri, 9 Oct"), which is what someone scanning
+   * recent spending is matching against. Past that it carries the year, because
+   * "9 Oct" alone is genuinely ambiguous between this year and the last — the same
+   * ambiguity that made the reports table's "Oct 26" unreadable.
+   */
+  return daysBetween(ymd, today, timeZone) <= FRIENDLY_WINDOW_DAYS
+    ? formatDayLabel(ymd, timeZone)
+    : formatDayWithYear(ymd, timeZone)
+}
+
+/**
+ * A dated label that says which year, e.g. "9 Oct 2025".
+ *
+ * Separate from `formatDayLabel` rather than a flag on it: the two are never
+ * interchangeable, and a boolean argument would let a call site pick the ambiguous
+ * one by accident — which is the defect this exists to close.
+ */
+export function formatDayWithYear(ymd: string, timeZone: string): string {
+  const [year, , day] = ymd.split('-').map(Number)
+  const monthShort = new Intl.DateTimeFormat('en-GB', { timeZone, month: 'short' })
+    .format(startOfDayIn(timeZone, ymd))
+    .replace('Sept', 'Sep')
+  // The month name comes from the formatter, so it agrees with `formatDayLabel`
+  // across locales. The year and day are read off the calendar fields instead: a
+  // `date` carries no zone, so its own digits are the truth, and re-deriving them
+  // from an instant is how the weekday drifts by one either side of UTC.
+  return `${day} ${monthShort} ${year}`
+}
+
+/**
+ * Whole calendar days from `from` to `to`, both `YYYY-MM-DD` in `timeZone`.
+ *
+ * Sign follows the calendar, not the instant: `to` before `from` is negative.
+ */
+function daysBetween(from: string, to: string, timeZone: string): number {
+  let days = 0
+  let cursor = from
+  // Bounded so a malformed value cannot spin here. A `date` column cannot hold one,
+  // but this function is also reachable from a row whose value failed validation.
+  for (let i = 0; i < 3660; i += 1) {
+    if (cursor === to) return days
+    if (cursor > to) return -days
+    cursor = addDaysTo(cursor, 1, timeZone)
+    days += 1
+  }
+  return days
+}
+
+/**
  * A short human date for a header or a row, e.g. "Sun, 4 Oct".
  *
  * Rendered in the user's timezone so the weekday matches the day they acted on.

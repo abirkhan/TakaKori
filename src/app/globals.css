@@ -398,6 +398,29 @@
     background-color: var(--hairline);
   }
 
+  /* A calendar-day heading above a group of transaction rows.
+     Sticky, so the day a row belongs to stays readable while its own rows scroll
+     under it. That only works because it is opaque — a translucent sticky header
+     over a column of taka is unreadable exactly when it is needed.
+
+     `.tk-eyebrow` for the type and size (13px, `--muted`), because a day heading is
+     the grey line above a figure rather than a section heading: it labels the rows
+     beneath it and must never compete with the row titles.
+
+     The horizontal padding matches `.tk-row` (1.25rem) rather than the card's own
+     1.25rem, so the heading and the rows it labels share one left edge — the 40px
+     edge from the design system. `scroll-margin-top` leaves room for the app bar
+     when a group is targeted by the skip link. */
+  .tk-day-head {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--muted);
+    padding: 0.75rem 1.25rem 0.5rem;
+    background-color: var(--canvas);
+    scroll-margin-top: 4rem;
+  }
+
   /* --- Typography ------------------------------------------------------ */
 
   /* Screen title. One per screen, always the h1, always left-aligned. */

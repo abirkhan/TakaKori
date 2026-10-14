@@ -294,9 +294,18 @@ const MONTH_NAMES = [
   'Dec',
 ]
 
+/**
+ * A month's axis and table label, e.g. "Oct 2026".
+ *
+ * **The two-digit year was the bug.** "Oct 26" reads as the 26th of October — it is
+ * how a date is written everywhere else in the app — and a reader scanning the
+ * table had to stop and work out which one they were looking at. The full year is
+ * four characters wider and unambiguous, and the label is short enough that it fits
+ * the column without truncation.
+ */
 function shortLabel(ym: string): string {
   const [year, month] = ym.split('-')
-  return `${MONTH_NAMES[Number(month) - 1] ?? month} ${year.slice(2)}`
+  return `${MONTH_NAMES[Number(month) - 1] ?? month} ${year}`
 }
 
 /**
